@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Pre-commit hook: enforce test coverage before every commit.
+# Run the full coverage suite to catch per-file threshold failures early.
+npm run test:coverage --silent

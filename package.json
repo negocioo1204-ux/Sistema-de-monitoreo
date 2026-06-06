@@ -1,0 +1,64 @@
+{
+    "name": "safe-omada-mcp",
+    "version": "0.17.0",
+    "description": "Security-focused Model Context Protocol server for TP-Link Omada Open API workflows",
+    "type": "module",
+    "main": "dist/index.js",
+    "bin": {
+        "safe-omada-mcp": "./dist/index.js"
+    },
+    "scripts": {
+        "build": "tsc -p tsconfig.json",
+        "lint": "biome check --error-on-warnings ./scripts ./monitoring",
+        "lint:fix": "biome check --write .",
+        "format": "biome format --write .",
+        "check": "npm run lint && tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "test:coverage": "vitest run --coverage",
+        "dev": "tsx src/index.ts",
+        "start": "node dist/index.js",
+        "inspector": "tsx scripts/run-inspector.ts",
+        "inspector:build": "npm run build && tsx scripts/run-inspector.ts build",
+        "auto-qos": "tsx scripts/auto-qos.ts",
+        "auto-qos:once": "tsx scripts/auto-qos.ts --once",
+        "docker:build": "docker build -f Dockerfile -t ghcr.io/gaspareduard/omada-mcp:latest .",
+        "docker:run": "docker run --rm -it --env-file .env --env-file .env.local ghcr.io/gaspareduard/omada-mcp:latest",
+        "docker:push": "docker push ghcr.io/gaspareduard/omada-mcp:latest",
+        "prepare": "husky"
+    },
+    "files": ["dist/", "README.md", "README.Docker.md", "CHANGELOG.md", "LICENSE", ".env.example"],
+    "keywords": ["mcp", "tp-link", "omada"],
+    "engines": {
+        "node": ">=24.0.0"
+    },
+    "author": "gaspareduard",
+    "license": "MIT",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/gaspareduard/Omada-mcp.git"
+    },
+    "homepage": "https://github.com/gaspareduard/Omada-mcp#readme",
+    "bugs": {
+        "url": "https://github.com/gaspareduard/Omada-mcp/issues"
+    },
+    "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.21.0",
+        "axios": "^1.13.2",
+        "dotenv": "^17.2.3",
+        "pino": "^10.1.0",
+        "zod": "^3.25.76"
+    },
+    "devDependencies": {
+        "@biomejs/biome": "^2.4.6",
+        "@modelcontextprotocol/inspector": "^0.21.1",
+        "@types/node": "^24.10.0",
+        "@vitest/coverage-v8": "^4.0.10",
+        "@vitest/ui": "^4.0.8",
+        "concurrently": "^9.1.0",
+        "husky": "^9.1.7",
+        "tsx": "^4.20.6",
+        "typescript": "^5.9.3",
+        "vitest": "^4.0.8"
+    }
+}
