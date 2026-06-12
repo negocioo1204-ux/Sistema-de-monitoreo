@@ -88,41 +88,41 @@ Alertas simuladas:
 
 Interfaz visual con 7 pestanas (tabs):
 
-  📡 Resumen General:
+   Resumen General:
     - Estado de red (dispositivos, clientes, internet)
     - Estado del gateway (CPU, memoria con graficos de linea)
     - Alertas recientes (tarjetas con codigo de colores)
     - Historial de amenazas
 
-  🛡️ Seguridad:
+   Seguridad:
     - Metricas: intentos bloqueados, auth OK/fallidas, riesgo
     - Mapa geografico de ataques (Plotly Scattergeo)
     - Eventos recientes de seguridad
     - Detecciones IA
 
-  📊 Rendimiento:
+   Rendimiento:
     - Calidad WiFi, latencia, perdida de paquetes
     - Grafico de trafico en tiempo real (descarga/subida)
     - Tendencias (calidad, latencia, perdida)
     - Consumo por usuario
 
-  📱 Dispositivos:
+   Dispositivos:
     - Dispositivos en linea/offline
     - Temperatura promedio
     - Registro de desconexiones
 
-  🤖 IA Predictiva:
+   IA Predictiva:
     - Probabilidad de falla
     - Prediccion de congestion
     - Recomendaciones automaticas
     - Anomalias detectadas
 
-  🧾 Portal Cautivo:
+   Portal Cautivo:
     - Usuarios activos
     - Aceptacion de politicas
     - Desglose por rol (barras visuales)
 
-  🛠️ Administracion:
+   Administracion:
     - Administradores conectados
     - Bitacora de cambios
     - Historial de amenazas (grafico de barras)

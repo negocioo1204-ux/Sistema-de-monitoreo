@@ -6,10 +6,7 @@ import smtplib
 from datetime import datetime
 from email.message import EmailMessage
 from typing import Any
-
 log = logging.getLogger("omada-notifier")
-
-
 class NotificationManager:
     def __init__(self) -> None:
         # Carga de credenciales desde el archivo .env o entorno
@@ -20,7 +17,6 @@ class NotificationManager:
         self._smtp_from = os.getenv("SMTP_FROM", self._smtp_user)
         self._smtp_to = os.getenv("SMTP_TO", "")
         self._use_tls = os.getenv("SMTP_USE_TLS", "true").lower() in ("1", "true", "yes")
-
         # Verifica que las variables esenciales existan para activar el servicio
         self._enabled = bool(self._smtp_host and self._smtp_user and self._smtp_pass and self._smtp_to)
         
@@ -28,17 +24,15 @@ class NotificationManager:
         self._min_severity = os.getenv("NOTIFY_SEVERITY", "error").lower()
         self._cooldown = int(os.getenv("NOTIFY_COOLDOWN", "300"))  # Tiempo en segundos (Ej: 300s = 5 min)
         self._sent: dict[str, float] = {}
-
         self._severity_levels = {"info": 0, "warning": 1, "error": 2, "critical": 3}
         self._min_level = self._severity_levels.get(self._min_severity, 2) # Por defecto nivel 'error' (2)
-
         # Mapeo estético de Emojis según tu taxonomía de red
         self._emoji_map = {
             "critical": "🔴",
             "error": "🟠",
             "warning": "🟡",
             "info": "🔵",
-            "predictive": "🤖"
+            "predictive": ""
         }
         
         # Mapeo de Colores CSS para los bordes y cabeceras del correo HTML
@@ -49,12 +43,10 @@ class NotificationManager:
             "info": "#3b82f6",        # Azul (Logs normales)
             "predictive": "#8b5cf6"   # Morado/Violeta (Predicciones del Modelo de IA)
         }
-
         if self._enabled:
             log.info("Módulo de Notificaciones Omada-IA cargado correctamente.")
         else:
             log.info("Notificaciones de email deshabilitadas (falta configurar .env).")
-
     def _should_send(self, alert: dict[str, Any]) -> bool:
         """Aplica los filtros de urgencia y control de tiempo para evitar SPAM."""
         if not self._enabled:
@@ -81,12 +73,10 @@ class NotificationManager:
             
         self._sent[title] = now
         return True
-
     async def send_alert(self, alert: dict[str, Any]) -> bool:
         """Diseña y envía la interfaz HTML de un evento individual en la red."""
         if not self._should_send(alert):
             return False
-
         category = alert.get("category", "Red General")
         severity = alert.get("severity", "info").lower()
         title = alert.get("title", "Alerta de Red")
@@ -95,7 +85,6 @@ class NotificationManager:
         
         color = self._color_map.get(severity, "#3b82f6")
         emoji = self._emoji_map.get(severity, "🔵")
-
         # Generar HTML estético para el correo electrónico
         html = f"""<html><body style="font-family:'Segoe UI',Arial,sans-serif; padding:20px; background-color:#f3f4f6; margin:0;">
         <div style="max-width:600px; margin:0 auto; border-radius:12px; overflow:hidden; box-shadow:0 4px 6px rgba(0,0,0,0.1); background:#fff; border:1px solid #e5e7eb;">
@@ -111,14 +100,12 @@ class NotificationManager:
             </div>
             <div style="background:#1f2937; padding:12px; text-align:center; font-size:11px; color:#9ca3af;">Omada MCP - Motor Analítico e IA de Red</div>
         </div></body></html>"""
-
         msg = EmailMessage()
         msg["Subject"] = f"{emoji} OMADA IA - [{category}] - {title}"
         msg["From"] = self._smtp_from
         msg["To"] = self._smtp_to
         msg.set_content(detail)
         msg.add_alternative(html, subtype="html")
-
         try:
             # Ejecuta la llamada SMTP síncrona en un hilo separado
             def _send():
@@ -127,9 +114,8 @@ class NotificationManager:
                         s.starttls()
                     s.login(self._smtp_user, self._smtp_pass)
                     s.send_message(msg)
-
             await asyncio.to_thread(_send)
-            log.info(f"📬 Notificación de correo enviada correctamente: [{category}] - {title}")
+            log.info(f" Notificación de correo enviada correctamente: [{category}] - {title}")
             return True
         except Exception as e:
             log.error(f"❌ Error al enviar notificación de correo: {e}")

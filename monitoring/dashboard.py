@@ -12,29 +12,26 @@ from datetime import datetime
 # =========================================================================
 st.set_page_config(
     page_title="Omada MCP - Centro de Control Inteligente",
-    page_icon="⚙️",
+    page_icon="",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# Inyectar CSS personalizado para lograr estética oscura premium (glassmorphic)
+# CSS personalizado (glassmorphic)
 st.markdown(
     """
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;700;800&display=swap');
     
-    /* Fuente global y colores base */
     html, body, [class*="css"] {
         font-family: 'Outfit', sans-serif;
     }
     
-    /* Fondo con degradado radial oscuro */
     .stApp {
         background: radial-gradient(circle at 50% 50%, #0f172a 0%, #090d16 100%) !important;
         color: #f8fafc !important;
     }
     
-    /* Modificaciones en pestañas */
     .stTabs [data-baseweb="tab-list"] {
         gap: 8px;
         background-color: rgba(15, 23, 42, 0.6);
@@ -64,8 +61,7 @@ st.markdown(
         color: #ffffff !important;
         box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
     }
-
-    /* Tarjeta estilo Glassmorphism */
+    
     .glass-card {
         background: rgba(30, 41, 59, 0.45);
         backdrop-filter: blur(10px);
@@ -82,7 +78,7 @@ st.markdown(
         border-color: rgba(59, 130, 246, 0.4);
         transform: translateY(-2px);
     }
-
+    
     .glass-header {
         font-size: 1.1rem;
         font-weight: 700;
@@ -92,8 +88,7 @@ st.markdown(
         align-items: center;
         gap: 8px;
     }
-
-    /* Alertas con bordes glowing y colores temáticos */
+    
     .alert-box {
         padding: 12px 16px;
         border-radius: 10px;
@@ -133,8 +128,6 @@ st.markdown(
         border: 1px solid rgba(59, 130, 246, 0.15);
         border-left-width: 5px;
     }
-
-    /* Puntos parpadeantes para estado */
     .dot-live {
         height: 10px;
         width: 10px;
@@ -163,55 +156,26 @@ st.markdown(
 )
 
 # =========================================================================
-# 🔄 COMUNICACIÓN CON EL BACKEND (REST API y Carga de Estado)
+# 🔄 COMUNICACIÓN CON EL BACKEND
 # =========================================================================
 API_URL = "http://127.0.0.1:8000"
 
 def _get_fallback_state():
-    """Genera datos locales de fallback por si el servidor backend no responde."""
     return {
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "alerts": [
-            {
-                "category": "⚠️ Simulación",
-                "severity": "warning",
-                "title": "Backend FastAPI desconectado",
-                "detail": "El dashboard no se pudo conectar al servidor local en http://127.0.0.1:8000. Mostrando datos de simulación local.",
-                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }
-        ],
-        "network": {"overview": "Offline (Local)", "internet": "Connected", "threats": 0, "clients_total": 45, "devices_total": 14},
+        "alerts": [],
+        "network": {"overview": "Offline", "internet": "Connected", "threats": 0, "clients_total": 45, "devices_total": 14},
         "gateway": {"cpu": 10, "memory": 20, "wan_status": "UP", "latency_ms": 15, "packet_loss": 0.0},
-        "devices": {
-            "router": {"status": "Connected", "temp": 39.0, "cpu": 10, "ram": 35},
-            "switch_l3": {"status": "Connected", "temp": 36.5, "cpu": 15, "ram": 48},
-            "switch_l2": {"status": "Connected", "temp": 32.0, "cpu": 5, "ram": 25},
-            "ap_laboratorio": {"status": "Connected", "temp": 35.0, "clients": 18},
-            "ap_docentes": {"status": "Connected", "temp": 34.0, "clients": 12},
-            "ap_invitados": {"status": "Connected", "temp": 32.0, "clients": 15}
-        },
-        "performance": {
-            "wifi_quality": 90,
-            "bandwidth_capacity_mbps": 100,
-            "realtime_traffic": {"download": [50]*50, "upload": [15]*50},
-            "vlan_consumption": {"VLAN 10 (Admin)": 5.0, "VLAN 20 (Docentes)": 8.0, "VLAN 30 (Alumnos)": 20.0, "VLAN 40 (Invitados)": 12.0}
-        },
-        "captive_portal": {
-            "active_users": 45,
-            "roles_breakdown": {"Alumnos": 20, "Docentes": 15, "Invitados": 10},
-            "radius_status": "Connected",
-            "vouchers_remaining": 150
-        },
-        "ai": {
-            "fail_prob": 2,
-            "overheat_risk": "Bajo",
-            "memory_leak_risk": "Bajo",
-            "packet_loss_risk": "Bajo",
-            "recommendations": "Conecta e inicia el servidor FastAPI en el puerto 8000 para habilitar alertas automáticas y predicciones reales."
-        }
+        "devices": {"router": {"status": "Connected", "temp": 39.0}, "switch_l3": {"status": "Connected", "temp": 36.5, "ram": 48}},
+        "performance": {"wifi_quality": 90, "realtime_traffic": {"download": [50]*50, "upload": [15]*50}, "vlan_consumption": {}},
+        "captive_portal": {"active_users": 45, "roles_breakdown": {}, "radius_status": "Connected", "vouchers_remaining": 150},
+        "ai": {"fail_prob": 2, "recommendations": "Conecta el backend."},
+        "device_reputation": {},
+        "vlan_users": {},
+        "internet_quality": {"jitter": 2, "dns_status": "N/D", "download_speed": 0, "upload_speed": 0},
+        "ap_details": []
     }
 
-# Consultar el estado de red actual desde el backend
 try:
     res = httpx.get(f"{API_URL}/api/state", timeout=1.5)
     if res.status_code == 200:
@@ -225,422 +189,305 @@ except Exception:
     backend_online = False
 
 # =========================================================================
-# 📊 ESTRUCTURA DE LA INTERFAZ
+# 📊 INTERFAZ PRINCIPAL
 # =========================================================================
-st.title("Omada MCP — Observabilidad de Red & IA 🔗")
+st.title(" Omada MCP — Observabilidad de Red & IA")
 st.caption("Consola Inteligente Integrada | Análisis Predictivo, Alertas del Portal Cautivo y Segmentación de VLANs")
 
-# Barra lateral con estado de conexión y acciones
-st.sidebar.markdown("### 🤖 Estado del Sistema")
+st.sidebar.markdown("###  Estado del Sistema")
 if backend_online:
     st.sidebar.markdown('<p><span class="dot-live"></span> <b>Servidor Backend: ACTIVO</b></p>', unsafe_allow_html=True)
 else:
     st.sidebar.markdown('<p><span class="dot-offline"></span> <b>Servidor Backend: OFFLINE</b></p>', unsafe_allow_html=True)
-
 st.sidebar.info(f"Última actualización: {state['timestamp']}")
-
-# Opciones de simulación manual si se desea probar
 st.sidebar.markdown("---")
-st.sidebar.markdown("### ⚙️ Centro de Operaciones")
-if st.sidebar.button("Forzar Recarga del Dashboard 🔄"):
+st.sidebar.markdown("###  Centro de Operaciones")
+if st.sidebar.button(" Forzar Recarga del Dashboard"):
     st.rerun()
 
-# Definir las 5 pestañas principales
+# 7 pestañas
 tabs = st.tabs([
-    "📡 Vista General",
-    "🔑 Seguridad & Portal Cautivo",
-    "⚡ QoS y Rendimiento",
-    "🤖 Capa Predictiva",
-    "💬 Asistente IA de Red"
+    " Vista General",
+    " Seguridad & Portal",
+    " QoS y Rendimiento",
+    " Capa Predictiva",
+    " Asistente IA",
+    " Mapa de Red",
+    " Tendencias Históricas"
 ])
 
 # -------------------------------------------------------------------------
-# PESTAÑA 1: VISTA GENERAL
+# PESTAÑA 0: VISTA GENERAL
 # -------------------------------------------------------------------------
 with tabs[0]:
-    # Fila de métricas rápidas (KPIs)
     col1, col2, col3, col4 = st.columns(4)
-    
     with col1:
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">🌐 Estado General</div>
-                <h2 style='margin:0;color:#10b981;'>{state['network']['overview']}</h2>
-                <p style='margin:5px 0 0 0;font-size:0.85rem;color:#94a3b8;'>Salida de Internet: {state['network']['internet']}</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        
+        st.markdown(f"""<div class="glass-card"><div class="glass-header"> Estado General</div>
+                    <h2 style='margin:0;color:#10b981;'>{state['network']['overview']}</h2>
+                    <p>Internet: {state['network']['internet']}</p></div>""", unsafe_allow_html=True)
     with col2:
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">👥 Clientes Totales</div>
-                <h2 style='margin:0;color:#3b82f6;'>{state['network']['clients_total']}</h2>
-                <p style='margin:5px 0 0 0;font-size:0.85rem;color:#94a3b8;'>Distribuidos por VLAN</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        
+        st.markdown(f"""<div class="glass-card"><div class="glass-header">👥 Clientes Totales</div>
+                    <h2 style='margin:0;color:#3b82f6;'>{state['network']['clients_total']}</h2>
+                    <p>Distribuidos por VLAN</p></div>""", unsafe_allow_html=True)
     with col3:
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">🖥️ Switches y Router</div>
-                <h2 style='margin:0;color:#f59e0b;'>{state['network']['devices_total']} / 14</h2>
-                <p style='margin:5px 0 0 0;font-size:0.85rem;color:#94a3b8;'>Equipos Online en Omada</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        
+        st.markdown(f"""<div class="glass-card"><div class="glass-header">🖧 Switches y Router</div>
+                    <h2 style='margin:0;color:#f59e0b;'>{state['network']['devices_total']} / 14</h2>
+                    <p>Equipos Online</p></div>""", unsafe_allow_html=True)
     with col4:
-        cpu_gate = state["gateway"]["cpu"]
-        ram_gate = state["gateway"]["memory"]
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">🧠 Carga del Router</div>
-                <h2 style='margin:0;color:#8b5cf6;'>CPU: {cpu_gate}%</h2>
-                <p style='margin:5px 0 0 0;font-size:0.85rem;color:#94a3b8;'>Uso de Memoria RAM: {ram_gate}%</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
+        st.markdown(f"""<div class="glass-card"><div class="glass-header"> Carga del Router</div>
+                    <h2 style='margin:0;color:#8b5cf6;'>CPU: {state['gateway']['cpu']}%</h2>
+                    <p>RAM: {state['gateway']['memory']}%</p></div>""", unsafe_allow_html=True)
 
     st.markdown("---")
-    
-    # Dos columnas principales: Gráfico de Tráfico y Feed de Alertas
     g1, g2 = st.columns([3, 2])
-    
     with g1:
-        st.markdown('<div class="glass-header">📈 Consumo de Ancho de Banda (Real-time)</div>', unsafe_allow_html=True)
-        # Crear un gráfico interactivo de Plotly para el tráfico
+        st.markdown('<div class="glass-header"> Consumo de Ancho de Banda (Real-time)</div>', unsafe_allow_html=True)
         df_traffic = pd.DataFrame({
             "Descarga (Mbps)": state["performance"]["realtime_traffic"]["download"],
             "Subida (Mbps)": state["performance"]["realtime_traffic"]["upload"]
         })
-        
-        fig = px.line(
-            df_traffic, 
-            color_discrete_map={"Descarga (Mbps)": "#10b981", "Subida (Mbps)": "#3b82f6"}
-        )
-        fig.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color='#94a3b8',
-            xaxis_title="Tiempo (Ticks de 5s)",
-            yaxis_title="Velocidad (Mbps)",
-            margin=dict(l=10, r=10, t=10, b=10),
-            legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
-        )
-        fig.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
-        fig.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
+        fig = px.line(df_traffic, color_discrete_map={"Descarga (Mbps)": "#10b981", "Subida (Mbps)": "#3b82f6"})
+        fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8',
+                          xaxis_title="Tiempo (ticks 5s)", yaxis_title="Mbps")
         st.plotly_chart(fig, use_container_width=True)
-        
+
     with g2:
-        st.markdown('<div class="glass-header">🚨 Alertas Recientes y Logs Activos</div>', unsafe_allow_html=True)
-        
-        alerts_list = state.get("alerts", [])
-        if not alerts_list:
-            st.info("No hay alertas activas en el sistema. Todo se encuentra operando bajo parámetros estándar.")
+        st.markdown('<div class="glass-header"> Centro de Incidentes Críticos</div>', unsafe_allow_html=True)
+        incidentes = [a for a in state.get("alerts", []) if a["severity"] in ("critical", "error")]
+        if incidentes:
+            for inc in incidentes[:5]:
+                st.markdown(f"""<div class="alert-box alert-critical">
+                                <strong>🔴 {inc['title']}</strong><br/>
+                                {inc['detail']}<br/>
+                                <span style='font-size:0.7rem;'>{inc['timestamp']}</span>
+                            </div>""", unsafe_allow_html=True)
         else:
-            for alert in alerts_list[:7]:
-                severity = alert["category"]
-                sev_style = alert["severity"].lower()
-                
-                # Definir emojis
-                emoji = "🔵"
-                if sev_style == "critical":
-                    emoji = "🔴"
-                elif sev_style == "error":
-                    emoji = "🟠"
-                elif sev_style == "warning":
-                    emoji = "🟡"
-                elif sev_style == "predictive":
-                    emoji = "🤖"
-                
-                st.markdown(
-                    f"""<div class="alert-box alert-{sev_style}">
-                        <strong>{emoji} {alert['title']}</strong><br/>
-                        <span style='font-size:0.8rem;color:#94a3b8;'>Categoría: {alert['category']} | {alert['timestamp']}</span><br/>
-                        <span style='color:#cbd5e1;font-size:0.88rem;'>{alert['detail']}</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
+            st.success(" No hay incidentes críticos activos.")
+        st.markdown('<div class="glass-header"> Otras Alertas</div>', unsafe_allow_html=True)
+        otras = [a for a in state.get("alerts", []) if a["severity"] not in ("critical", "error")]
+        if otras:
+            for alert in otras[:5]:
+                st.info(f"**{alert['title']}** - {alert['detail']}  \n`{alert['timestamp']}`")
+        else:
+            st.info("No hay alertas menores.")
 
 # -------------------------------------------------------------------------
-# PESTAÑA 2: SEGURIDAD & PORTAL CAUTIVO
+# PESTAÑA 1: SEGURIDAD & PORTAL
 # -------------------------------------------------------------------------
 with tabs[1]:
-    st.subheader("🔑 Estado del Portal Cautivo y Segmentación por VLAN")
-    
-    col_port1, col_port2, col_port3 = st.columns(3)
-    with col_port1:
-        st.metric("Usuarios de Portal Activos", state["captive_portal"]["active_users"], delta=None)
-    with col_port2:
-        rad_status = state["captive_portal"]["radius_status"]
-        rad_color = "green" if rad_status == "Connected" else "red"
-        st.markdown(f"**Servidor de Autenticación RADIUS:** :{rad_color}[{rad_status}]")
-    with col_port3:
-        st.metric("Vouchers de Invitados Libres", state["captive_portal"]["vouchers_remaining"])
-        
+    st.subheader(" Estado del Portal Cautivo y Segmentación")
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Usuarios Activos", state["captive_portal"]["active_users"])
+    col2.markdown(f"**RADIUS:** :{'green' if state['captive_portal']['radius_status']=='Connected' else 'red'}[{state['captive_portal']['radius_status']}]")
+    col3.metric("Vouchers Libres", state["captive_portal"]["vouchers_remaining"])
     st.markdown("---")
-    
-    col_vlan_charts, col_vlan_logs = st.columns([1, 1])
-    
-    with col_vlan_charts:
-        st.markdown('<div class="glass-header">📊 Desglose de Usuarios Conectados por Rol</div>', unsafe_allow_html=True)
+    col_left, col_right = st.columns(2)
+    with col_left:
+        st.markdown('<div class="glass-header">👥 Usuarios por Rol</div>', unsafe_allow_html=True)
         roles = state["captive_portal"]["roles_breakdown"]
-        df_roles = pd.DataFrame({
-            "Rol": list(roles.keys()),
-            "Conectados": list(roles.values())
-        })
-        fig_roles = px.bar(
-            df_roles, x="Rol", y="Conectados", 
-            color="Rol", color_discrete_sequence=["#ef4444", "#3b82f6", "#10b981"]
-        )
-        fig_roles.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color='#94a3b8',
-            showlegend=False,
-            margin=dict(l=10, r=10, t=10, b=10)
-        )
-        fig_roles.update_yaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
-        st.plotly_chart(fig_roles, use_container_width=True)
-        
-    with col_vlan_logs:
-        st.markdown('<div class="glass-header">🔒 Logs de Seguridad y Filtrado de VLAN</div>', unsafe_allow_html=True)
-        # Filtrar alertas de seguridad y portal
-        logs_seguridad = [
-            a for a in state["alerts"] 
-            if a["category"] in ("🛡️ VLAN Segmentación", "🔒 Seguridad", "🔑 Portal Cautivo")
-        ]
-        
-        if not logs_seguridad:
-            st.success("No se registran violaciones de seguridad en las VLAN ni en el portal cautivo.")
+        if roles:
+            df_roles = pd.DataFrame({"Rol": list(roles.keys()), "Conectados": list(roles.values())})
+            fig = px.bar(df_roles, x="Rol", y="Conectados", color="Rol")
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+            st.plotly_chart(fig, use_container_width=True)
+    with col_right:
+        st.markdown('<div class="glass-header"> Reputación de Dispositivos</div>', unsafe_allow_html=True)
+        if "device_reputation" in state and state["device_reputation"]:
+            df_rep = pd.DataFrame(list(state["device_reputation"].items()), columns=["Dispositivo", "Puntuación"])
+            def color_rep(val):
+                if val >= 80:
+                    return "color: #10b981"
+                elif val >= 60:
+                    return "color: #f59e0b"
+                else:
+                    return "color: #ef4444"
+            # CORRECCIÓN: usar 'map' en lugar de 'applymap'
+            st.dataframe(df_rep.style.map(color_rep, subset=["Puntuación"]), use_container_width=True)
         else:
-            for log_sec in logs_seguridad[:5]:
-                sev = log_sec["severity"]
-                st.markdown(
-                    f"""<div class="alert-box alert-{sev}">
-                        <strong>{log_sec['title']}</strong><br/>
-                        <span style='font-size:0.8rem;color:#e2e8f0;'>Categoría: {log_sec['category']} | {log_sec['timestamp']}</span><br/>
-                        <span style='font-size:0.88rem;color:#f1f5f9;'>{log_sec['detail']}</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
+            st.info("No hay datos de reputación.")
+    st.markdown("---")
+    st.markdown('<div class="glass-header">👥 Análisis de Usuarios por VLAN</div>', unsafe_allow_html=True)
+    if "vlan_users" in state:
+        df_vu = pd.DataFrame(list(state["vlan_users"].items()), columns=["VLAN", "Usuarios"])
+        st.dataframe(df_vu, use_container_width=True)
+        st.markdown("**Consumo por VLAN (Mbps)**")
+        vlan_cons = state["performance"]["vlan_consumption"]
+        if vlan_cons:
+            df_bw = pd.DataFrame(list(vlan_cons.items()), columns=["VLAN", "Mbps"])
+            st.bar_chart(df_bw.set_index("VLAN"))
 
 # -------------------------------------------------------------------------
-# PESTAÑA 3: QOS Y RENDIMIENTO
+# PESTAÑA 2: QoS Y RENDIMIENTO
 # -------------------------------------------------------------------------
 with tabs[2]:
-    st.subheader("⚡ Optimización del Tránsito y QoS Dinámico")
-    
-    col_p1, col_p2, col_p3 = st.columns(3)
-    with col_p1:
-        st.metric("Calidad Promedio del Wi-Fi", f"{state['performance']['wifi_quality']}%", delta=None)
-    with col_p2:
-        st.metric("Latencia al DNS Gateway", f"{state['gateway']['latency_ms']} ms", delta=None)
-    with col_p3:
-        st.metric("Pérdida de Paquetes en WAN", f"{round(state['gateway']['packet_loss']*100, 2)}%", delta=None)
-        
+    st.subheader(" Optimización del Tránsito")
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Calidad Wi-Fi", f"{state['performance']['wifi_quality']}%")
+    col2.metric("Latencia", f"{state['gateway']['latency_ms']} ms")
+    col3.metric("Jitter", f"{state.get('internet_quality',{}).get('jitter',0)} ms")
+    col4.metric("Pérdida", f"{round(state['gateway']['packet_loss']*100,2)}%")
+    st.markdown(f"**DNS:** {state.get('internet_quality',{}).get('dns_status','N/D')}  |  **Velocidad real:** {state.get('internet_quality',{}).get('download_speed',0)} Mbps ↓ / {state.get('internet_quality',{}).get('upload_speed',0)} Mbps ↑")
     st.markdown("---")
-    
-    col_qos_stats, col_qos_logs = st.columns([1, 1])
-    
-    with col_qos_stats:
-        st.markdown('<div class="glass-header">📊 Consumo de Ancho de Banda por VLAN (Mbps)</div>', unsafe_allow_html=True)
+    col_q1, col_q2 = st.columns([1,1])
+    with col_q1:
+        st.markdown('<div class="glass-header"> Consumo por VLAN (Mbps)</div>', unsafe_allow_html=True)
         vlan_cons = state["performance"]["vlan_consumption"]
-        df_vlan = pd.DataFrame({
-            "VLAN": list(vlan_cons.keys()),
-            "Ancho de Banda (Mbps)": list(vlan_cons.values())
-        })
-        fig_vlan = px.bar(
-            df_vlan, y="VLAN", x="Ancho de Banda (Mbps)", 
-            orientation="h", color="VLAN",
-            color_discrete_sequence=px.colors.qualitative.Pastel
-        )
-        fig_vlan.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            plot_bgcolor='rgba(0,0,0,0)',
-            font_color='#94a3b8',
-            showlegend=False,
-            margin=dict(l=10, r=10, t=10, b=10)
-        )
-        fig_vlan.update_xaxes(showgrid=True, gridcolor='rgba(255,255,255,0.05)')
-        st.plotly_chart(fig_vlan, use_container_width=True)
-        
-    with col_qos_logs:
-        st.markdown('<div class="glass-header">⚡ Logs del Motor de QoS Dinámico</div>', unsafe_allow_html=True)
-        # Filtrar alertas de QoS
-        logs_qos = [
-            a for a in state["alerts"] 
-            if a["category"] == "⚡ QoS Dinámico"
-        ]
-        
-        if not logs_qos:
-            st.info("El QoS dinámico está operando en segundo plano. No se han requerido mitigaciones de ancho de banda recientemente.")
+        if vlan_cons:
+            df_vlan = pd.DataFrame(list(vlan_cons.items()), columns=["VLAN", "Mbps"])
+            fig = px.bar(df_vlan, y="VLAN", x="Mbps", orientation="h", color="VLAN")
+            fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+            st.plotly_chart(fig, use_container_width=True)
+    with col_q2:
+        st.markdown('<div class="glass-header">📡 Estado de Access Points</div>', unsafe_allow_html=True)
+        if "ap_details" in state and state["ap_details"]:
+            df_ap = pd.DataFrame(state["ap_details"])
+            st.dataframe(df_ap, use_container_width=True)
+            max_ap = max(state["ap_details"], key=lambda x: x["clients"])
+            st.info(f"🏆 AP más utilizado: **{max_ap['name']}** con {max_ap['clients']} clientes.")
         else:
-            for l_qos in logs_qos[:5]:
-                st.markdown(
-                    f"""<div class="alert-box alert-{l_qos['severity']}">
-                        <strong>{l_qos['title']}</strong><br/>
-                        <span style='font-size:0.8rem;color:#e2e8f0;'>{l_qos['timestamp']}</span><br/>
-                        <span style='font-size:0.88rem;color:#f1f5f9;'>{l_qos['detail']}</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
+            st.info("No hay datos de APs.")
 
 # -------------------------------------------------------------------------
-# PESTAÑA 4: CAPA PREDICTIVA (ALERTAS TEMPRANAS)
+# PESTAÑA 3: CAPA PREDICTIVA
 # -------------------------------------------------------------------------
 with tabs[3]:
-    st.subheader("🤖 Análisis Predictivo y Salud de los Dispositivos")
-    
-    col_temp1, col_temp2, col_temp3 = st.columns(3)
-    
-    with col_temp1:
-        temp_r = state["devices"]["router"]["temp"]
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">🌡️ Router ER605</div>
-                <h3 style="margin:0;color:#ef4444;">{round(temp_r, 1)} °C</h3>
-                <p style="margin:5px 0 0 0;font-size:0.8rem;color:#94a3b8;">Límite térmico: 70°C | Riesgo: {state['ai']['overheat_risk']}</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        
-    with col_temp2:
-        temp_sw = state["devices"]["switch_l3"]["temp"]
-        ram_sw = state["devices"]["switch_l3"]["ram"]
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">🌡️ Switch L3 SG3428X</div>
-                <h3 style="margin:0;color:#10b981;">{temp_sw} °C</h3>
-                <p style="margin:5px 0 0 0;font-size:0.8rem;color:#94a3b8;">Uso RAM: {ram_sw}% | Fuga RAM: {state['ai']['memory_leak_risk']}</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-        
-    with col_temp3:
-        st.markdown(
-            f"""<div class="glass-card">
-                <div class="glass-header">🤖 Probabilidad de Caída</div>
-                <h3 style="margin:0;color:#8b5cf6;">{state['ai']['fail_prob']}%</h3>
-                <p style="margin:5px 0 0 0;font-size:0.8rem;color:#94a3b8;">Calculado por algoritmo de IA</p>
-            </div>""",
-            unsafe_allow_html=True
-        )
-
+    st.subheader(" Análisis Predictivo y Salud")
+    col1, col2, col3 = st.columns(3)
+    col1.markdown(f"""<div class="glass-card"><div class="glass-header">🌡️ Router</div>
+                    <h3>{round(state['devices']['router']['temp'],1)} °C</h3>
+                    <p>Riesgo: {state['ai'].get('overheat_risk','Bajo')}</p></div>""", unsafe_allow_html=True)
+    col2.markdown(f"""<div class="glass-card"><div class="glass-header">🖧 Switch L3</div>
+                    <h3>{state['devices']['switch_l3']['temp']} °C</h3>
+                    <p>RAM: {state['devices']['switch_l3'].get('ram',0)}% | Fuga: {state['ai'].get('memory_leak_risk','Bajo')}</p></div>""", unsafe_allow_html=True)
+    col3.markdown(f"""<div class="glass-card"><div class="glass-header"> Prob. Caída</div>
+                    <h3>{state['ai']['fail_prob']}%</h3>
+                    <p>Predicción IA</p></div>""", unsafe_allow_html=True)
     st.markdown("---")
-    
-    col_pred_rec, col_pred_logs = st.columns([1, 1])
-    
-    with col_pred_rec:
-        st.markdown('<div class="glass-header">🤖 Recomendación Preventiva de la IA</div>', unsafe_allow_html=True)
+    col_rec, col_pred = st.columns([1,1])
+    with col_rec:
+        st.markdown('<div class="glass-header"> Recomendación IA</div>', unsafe_allow_html=True)
         st.success(state["ai"]["recommendations"])
-        
-        # Simular gráfico indicador de probabilidad
-        st.markdown("<br/>", unsafe_allow_html=True)
-        fig_fail = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = state["ai"]["fail_prob"],
-            domain = {'x': [0, 1], 'y': [0, 1]},
-            title = {'text': "Probabilidad de Congestión / Fallo en 24hs", 'font': {'color': '#94a3b8', 'size': 16}},
-            gauge = {
-                'axis': {'range': [None, 100], 'tickwidth': 1, 'tickcolor': "#94a3b8"},
-                'bar': {'color': "#8b5cf6"},
-                'bgcolor': "rgba(30,41,59,0.5)",
-                'borderwidth': 2,
-                'bordercolor': "rgba(255,255,255,0.08)",
-                'steps': [
-                    {'range': [0, 30], 'color': 'rgba(16, 185, 129, 0.15)'},
-                    {'range': [30, 70], 'color': 'rgba(245, 158, 11, 0.15)'},
-                    {'range': [70, 100], 'color': 'rgba(239, 68, 68, 0.15)'}
-                ],
-            }
-        ))
-        fig_fail.update_layout(
-            paper_bgcolor='rgba(0,0,0,0)',
-            font={'color': "#f8fafc"},
-            margin=dict(l=20, r=20, t=40, b=20),
-            height=260
-        )
-        st.plotly_chart(fig_fail, use_container_width=True)
-
-    with col_pred_logs:
-        st.markdown('<div class="glass-header">🔮 Registro de Predicciones del Algoritmo</div>', unsafe_allow_html=True)
-        
-        # Filtrar alertas predictivas
-        logs_pred = [
-            a for a in state["alerts"] 
-            if a["category"] == "🤖 Predicción IA"
-        ]
-        
-        if not logs_pred:
-            st.info("No hay anomalías predictivas registradas. Los tiempos de respuesta y las temperaturas se mantienen estables.")
+        try:
+            recs_res = httpx.get(f"{API_URL}/api/recommendations", timeout=3.0)
+            if recs_res.status_code == 200:
+                recs = recs_res.json()["recommendations"]
+                for r in recs:
+                    st.markdown(f" {r}")
+        except:
+            pass
+    with col_pred:
+        st.markdown('<div class="glass-header"> Alertas Predictivas</div>', unsafe_allow_html=True)
+        preds = [a for a in state.get("alerts", []) if a["category"] == " Predicción IA"]
+        if preds:
+            for p in preds[:4]:
+                st.markdown(f"""<div class="alert-box alert-predictive">
+                                <strong> {p['title']}</strong><br/>{p['detail']}<br/><span style='font-size:0.7rem;'>{p['timestamp']}</span>
+                            </div>""", unsafe_allow_html=True)
         else:
-            for l_pred in logs_pred[:4]:
-                st.markdown(
-                    f"""<div class="alert-box alert-predictive">
-                        <strong>🔮 {l_pred['title']}</strong><br/>
-                        <span style='font-size:0.8rem;color:#e2e8f0;'>Frecuencia de muestreo: 5s | {l_pred['timestamp']}</span><br/>
-                        <span style='font-size:0.88rem;color:#f1f5f9;'>{l_pred['detail']}</span>
-                    </div>""",
-                    unsafe_allow_html=True
-                )
+            st.info("No hay alertas predictivas.")
 
 # -------------------------------------------------------------------------
-# PESTAÑA 5: ASISTENTE IA DE RED
+# PESTAÑA 4: ASISTENTE IA
 # -------------------------------------------------------------------------
 with tabs[4]:
-    st.subheader("💬 Asistente IA de Infraestructura y Diagnóstico Omada")
-    st.write("Consulta al Asistente experto (CCIE) sobre el estado actual del router, switches, portal cautivo o anomalías en las VLANs.")
-    
-    # Inicializar historial de chat en session_state si no existe
+    st.subheader(" Asistente IA de Red")
+    st.write("Consulta al experto sobre el estado de la red.")
     if "chat_history" not in st.session_state:
-        st.session_state.chat_history = [
-            {
-                "role": "assistant",
-                "message": "Hola, soy tu Asistente de Red experto de Omada. Analizo la telemetría del controlador en tiempo real. ¿Cómo puedo ayudarte hoy?"
-            }
-        ]
-
-    # Mostrar mensajes de chat previos
+        st.session_state.chat_history = [{"role": "assistant", "message": "Hola, soy tu Asistente Omada. ¿Cómo puedo ayudarte?"}]
     for chat in st.session_state.chat_history:
         with st.chat_message(chat["role"]):
             st.markdown(chat["message"])
-
-    # Entrada del chat del usuario
-    if prompt := st.chat_input("Escribe tu consulta aquí... (ej: '¿Por qué la VLAN de alumnos está lenta?' o '¿Cómo está la red hoy?')"):
-        # Mostrar el mensaje del usuario
+    if prompt := st.chat_input("Escribe tu consulta..."):
         with st.chat_message("user"):
             st.markdown(prompt)
-        
-        # Guardar en el historial
         st.session_state.chat_history.append({"role": "user", "message": prompt})
-        
-        # Realizar llamada al endpoint de chat de FastAPI
         with st.chat_message("assistant"):
-            with st.spinner("🤖 Analizando telemetría y diagnosticando..."):
+            with st.spinner("Analizando..."):
                 try:
-                    res = httpx.post(f"{API_URL}/api/chat", json={"pregunta": prompt}, timeout=25.0)
+                    res = httpx.post(f"{API_URL}/api/chat", json={"pregunta": prompt}, timeout=25)
                     if res.status_code == 200:
-                        data = res.json()
-                        respuesta_ia = data["response"]
-                        engine = data["engine"]
-                        st.markdown(respuesta_ia)
-                        st.caption(f"Motor de inferencia: {engine}")
+                        respuesta = res.json()["response"]
+                        st.markdown(respuesta)
+                        st.session_state.chat_history.append({"role": "assistant", "message": respuesta})
                     else:
-                        respuesta_ia = f"❌ Error del servidor de chat (HTTP {res.status_code})"
-                        st.markdown(respuesta_ia)
+                        st.error("Error en el asistente.")
                 except Exception as e:
-                    respuesta_ia = f"❌ Error al conectar con el motor de chat: {e}"
-                    st.markdown(respuesta_ia)
-                    
-        # Guardar en el historial la respuesta del asistente
-        st.session_state.chat_history.append({"role": "assistant", "message": respuesta_ia})
+                    st.error(f"Error: {e}")
 
-# =========================================================================
-# 🔄 BUCLE DE AUTO-REFRESCO PARA STREAMLIT
-# =========================================================================
-# Refresca el dashboard cada 5 segundos de forma silenciosa para captar datos en tiempo real
-time.sleep(5)
-st.rerun()
+# -------------------------------------------------------------------------
+# PESTAÑA 5: MAPA DE RED (CORREGIDO - SIN ERROR DE PERMISO)
+# -------------------------------------------------------------------------
+with tabs[5]:
+    st.subheader(" Topología Inteligente de la Red")
+    st.markdown("Estado: 🟢 Operativo, 🟡 Advertencia, 🔴 Crítico")
+    try:
+        from pyvis.network import Network
+        import tempfile
+        import os
+        
+        net = Network(height="600px", width="100%", bgcolor="#0f172a", font_color="white")
+        
+        router_color = "green" if state["devices"]["router"]["status"] == "Connected" else "red"
+        sw_l3_color = "green" if state["devices"]["switch_l3"]["status"] == "Connected" else "red"
+        ap_biblio_color = "orange" if any(ap["name"]=="AP Biblioteca" and ap["saturation"]=="Alta" for ap in state.get("ap_details",[])) else "green"
+        
+        net.add_node("Router Principal", title="Router ER605", color=router_color, shape="box")
+        net.add_node("Router Backup", title="Router Backup", color="green", shape="box")
+        net.add_node("Switch Core L3", title="Switch Core", color=sw_l3_color, shape="box")
+        net.add_node("Switch Acceso P1", title="Switch Piso 1", color="green", shape="box")
+        net.add_node("Switch Acceso P2", title="Switch Piso 2", color="green", shape="box")
+        net.add_node("AP Biblioteca", title="AP Biblioteca", color=ap_biblio_color, shape="dot")
+        net.add_node("AP Laboratorio", title="AP Laboratorio", color="green", shape="dot")
+        
+        net.add_edge("Router Principal", "Switch Core L3")
+        net.add_edge("Router Backup", "Switch Core L3")
+        net.add_edge("Switch Core L3", "Switch Acceso P1")
+        net.add_edge("Switch Core L3", "Switch Acceso P2")
+        net.add_edge("Switch Acceso P1", "AP Biblioteca")
+        net.add_edge("Switch Acceso P2", "AP Laboratorio")
+        
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
+            net.save_graph(tmp.name)
+            tmp_path = tmp.name
+        with open(tmp_path, "r", encoding="utf-8") as f:
+            html_content = f.read()
+        st.components.v1.html(html_content, height=650, scrolling=False)
+        # No eliminamos el archivo para evitar error de permiso
+    except ImportError:
+        st.error("Instala pyvis: pip install pyvis")
+    except Exception as e:
+        st.warning(f"Error en el mapa: {e}")
+
+# -------------------------------------------------------------------------
+# PESTAÑA 6: TENDENCIAS HISTÓRICAS
+# -------------------------------------------------------------------------
+with tabs[6]:
+    st.subheader(" Evolución Temporal de la Red")
+    try:
+        res_hist = httpx.get(f"{API_URL}/api/history", timeout=3.0)
+        if res_hist.status_code == 200:
+            hist = res_hist.json()
+            if hist["traffic"]:
+                df = pd.DataFrame(hist["traffic"], columns=["timestamp", "download", "upload"])
+                df["timestamp"] = pd.to_datetime(df["timestamp"])
+                fig = px.line(df, x="timestamp", y=["download", "upload"], title="Tráfico agregado")
+                fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+                st.plotly_chart(fig, use_container_width=True)
+            if hist["clients"]:
+                dfc = pd.DataFrame(hist["clients"], columns=["timestamp", "total_clients"])
+                dfc["timestamp"] = pd.to_datetime(dfc["timestamp"])
+                figc = px.line(dfc, x="timestamp", y="total_clients", title="Clientes conectados")
+                figc.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+                st.plotly_chart(figc, use_container_width=True)
+            if hist["wan_latency"] and hist["wan_jitter"]:
+                dflat = pd.DataFrame(hist["wan_latency"], columns=["timestamp", "latencia_ms"])
+                dfjit = pd.DataFrame(hist["wan_jitter"], columns=["timestamp", "jitter_ms"])
+                dfm = pd.merge(dflat, dfjit, on="timestamp")
+                dfm["timestamp"] = pd.to_datetime(dfm["timestamp"])
+                figj = px.line(dfm, x="timestamp", y=["latencia_ms", "jitter_ms"], title="Latencia y Jitter WAN")
+                figj.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', font_color='#94a3b8')
+                st.plotly_chart(figj, use_container_width=True)
+        else:
+            st.warning("No se pudieron cargar datos históricos.")
+    except Exception as e:
+        st.error(f"Error: {e}")
