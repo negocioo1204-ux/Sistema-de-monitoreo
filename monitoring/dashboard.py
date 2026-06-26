@@ -222,16 +222,16 @@ def _get_fallback_state():
             "switch_l3": {"status": "Connected", "temp": 36.0, "cpu": 10, "ram": 35},
             "switch_l2": {"status": "Connected", "temp": 32.0, "cpu": 8, "ram": 28},
             "ap_laboratorio": {"status": "Connected", "temp": 30.0, "clients": 15},
-            "ap_docentes": {"status": "Connected", "temp": 29.5, "clients": 12},
+            "ap_administracion": {"status": "Connected", "temp": 29.5, "clients": 12},
             "ap_invitados": {"status": "Connected", "temp": 29.0, "clients": 18}
         },
         "performance": {
             "wifi_quality": 92,
             "bandwidth_capacity_mbps": 100,
             "realtime_traffic": {"download": [20.0]*50, "upload": [5.0]*50},
-            "vlan_consumption": {"VLAN 10 (Admin)": 2.0, "VLAN 20 (Docentes)": 6.5, "VLAN 30 (Alumnos)": 10.2, "VLAN 40 (Invitados)": 3.3}
+            "vlan_consumption": {"VLAN 10 (Admin)": 2.0, "VLAN 20 (Administración)": 6.5, "VLAN 30 (Alumnos)": 10.2, "VLAN 40 (Invitados)": 3.3}
         },
-        "captive_portal": {"active_users": 45, "roles_breakdown": {"Estudiantes": 25, "Docentes": 12, "Invitados": 8}, "radius_status": "Connected", "vouchers_remaining": 150},
+        "captive_portal": {"active_users": 45, "roles_breakdown": {"Estudiantes": 25, "Administración": 12, "Invitados": 8}, "radius_status": "Connected", "vouchers_remaining": 150},
         "predictions": {
             "download_forecast": [20.0]*6,
             "upload_forecast": [5.0]*6,
@@ -249,7 +249,7 @@ def _get_fallback_state():
             "recommendations": ["• Para activar el análisis de tendencias predictivas en tiempo real, encienda el backend FastAPI."]
         },
         "device_reputation": {"PC-Admin-01": 99, "Movil-Profesor": 95, "Laptop-Alumno": 75},
-        "vlan_users": {"VLAN 10 (Admin)": 4, "VLAN 20 (Docentes)": 12, "VLAN 30 (Alumnos)": 21, "VLAN 40 (Invitados)": 8},
+        "vlan_users": {"VLAN 10 (Admin)": 4, "VLAN 20 (Administración)": 12, "VLAN 30 (Alumnos)": 21, "VLAN 40 (Invitados)": 8},
         "internet_quality": {"latency": 12, "jitter": 1, "packet_loss": 0.0001, "download_speed": 100.0, "upload_speed": 20.0, "dns_status": "Operativo"},
         "ap_details": [],
         "security_logs": []
@@ -266,6 +266,12 @@ try:
 except Exception:
     state = _get_fallback_state()
     backend_online = False
+# Obtener estado de Auto-Mitigación
+try:
+    auto_mitig_res = httpx.get(f"{API_URL}/api/simulation/automitigation", timeout=1.0)
+    auto_mitigation_active = auto_mitig_res.json().get("active", False)
+except:
+    auto_mitigation_active = False
 # =========================================================================
 # 🎛️ PANEL DE CONTROL DE SIMULACIÓN (SIDEBAR)
 # =========================================================================
@@ -278,7 +284,7 @@ else:
     st.sidebar.markdown('<p><span class="dot-pulse-red"></span> <b>Servidor Backend: DESCONECTADO</b></p>', unsafe_allow_html=True)
 st.sidebar.markdown("---")
 # Panel del Simulador (solo habilitado si el backend está activo)
-st.sidebar.markdown("### 🎛️ Simulador de Incidentes")
+st.sidebar.markdown("###  Simulador de Incidentes")
 if backend_online:
     # Obtener escenario activo desde la salud
     try:
@@ -289,11 +295,11 @@ if backend_online:
         
     scenarios_dict = {
         "normal": "🟢 Operación Estable (Normal)",
-        "mass_download": "📥 Descarga Masiva (Tráfico)",
-        "memory_leak": "💾 Fuga de Memoria (Switch L3)",
-        "overheating": "🔥 Sobretemperatura (Router)",
-        "wifi_interference": "📡 Interferencia WiFi (Señal)",
-        "ddos_attack": "🛡️ Inundación DDoS (Seguridad)"
+        "mass_download": " Descarga Masiva (Tráfico)",
+        "memory_leak": " Fuga de Memoria (Switch L3)",
+        "overheating": " Sobretemperatura (Router)",
+        "wifi_interference": " Interferencia WiFi (Señal)",
+        "ddos_attack": " Inundación DDoS (Seguridad)"
     }
     
     selected_scenario_label = st.sidebar.selectbox(
@@ -319,23 +325,38 @@ if backend_online:
     
     c1, c2 = st.sidebar.columns(2)
     with c1:
-        if st.sidebar.button("🧹 Reset Switch", use_container_width=True, help="Mitiga fuga de memoria"):
+        if st.sidebar.button(" Reset Switch", use_container_width=True, help="Mitiga fuga de memoria"):
             httpx.post(f"{API_URL}/api/simulation/action", json={"action": "reset_switch"})
             st.rerun()
-        if st.sidebar.button("❄️ Enfriar Router", use_container_width=True, help="Mitiga sobrecalentamiento"):
+        if st.sidebar.button(" Enfriar Router", use_container_width=True, help="Mitiga sobrecalentamiento"):
             httpx.post(f"{API_URL}/api/simulation/action", json={"action": "reset_overheat"})
             st.rerun()
     with c2:
-        if st.sidebar.button("📶 Limitar Tránsito", use_container_width=True, help="Aplica QoS dinámico"):
+        if st.sidebar.button(" Limitar Tránsito", use_container_width=True, help="Aplica QoS dinámico"):
             httpx.post(f"{API_URL}/api/simulation/action", json={"action": "apply_qos"})
             st.rerun()
-        if st.sidebar.button("🛡️ Bloquear Atacantes", use_container_width=True, help="Mitiga DDoS perimetral"):
+        if st.sidebar.button(" Bloquear Atacantes", use_container_width=True, help="Mitiga DDoS perimetral"):
             httpx.post(f"{API_URL}/api/simulation/action", json={"action": "block_ddos"})
             st.rerun()
             
     if st.sidebar.button("🟢 Limpiar y Restablecer Estado Normal", use_container_width=True):
         httpx.post(f"{API_URL}/api/simulation/action", json={"action": "reset_all"})
         st.rerun()
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 🤖 Operaciones Inteligentes")
+    auto_mitig_toggle = st.sidebar.checkbox(
+        "Auto-Mitigación IA (Auto-Healing)",
+        value=auto_mitigation_active,
+        help="La IA prevendrá y resolverá fallas de red de manera autónoma antes de que ocurran."
+    )
+    if auto_mitig_toggle != auto_mitigation_active:
+        try:
+            httpx.post(f"{API_URL}/api/simulation/automitigation", json={"active": auto_mitig_toggle})
+            st.sidebar.success("Configuración de Auto-Mitigación actualizada.")
+            time.sleep(0.5)
+            st.rerun()
+        except:
+            pass
 else:
     st.sidebar.warning("⚠️ Bucle de simulación desactivado. El servidor FastAPI local no responde. Inicia 'run.bat' para activar los escenarios interactivos.")
 st.sidebar.markdown("---")
@@ -360,14 +381,21 @@ with col_head2:
         st.markdown('<div style="text-align:right; margin-top:20px;"><span class="dot-pulse-red"></span></div>', unsafe_allow_html=True)
 # 7 Pestañas
 tabs = st.tabs([
-    "🖥️ Control General (NOC)",
-    "🔮 Capa Predictiva IA",
+    " Control General (NOC)",
+    " Capa Predictiva IA",
     "🔒 Seguridad & Portal",
-    "📶 Rendimiento & APs",
+    " Rendimiento & APs",
     "🤖 Asistente de Red",
-    "🕸️ Mapa de Topología",
-    "📈 Evolución Histórica"
+    " Mapa de Topología",
+    " Evolución Histórica"
 ])
+# Banner de Auto-Mitigación
+if state.get("predictions", {}).get("auto_mitigation_active", False) or auto_mitigation_active:
+    st.markdown("""
+        <div class="alert-box alert-predictive" style="margin-top: 10px; margin-bottom: 20px; text-align: center; background: rgba(217, 70, 239, 0.08); border-left-color: #d946ef; border-left-width: 5px;">
+            <strong>🤖 PILOTO AUTOMÁTICO IA ACTIVO (Auto-Healing)</strong>: El motor predictivo tiene permitido mitigar anomalías y desvíos de telemetría de forma autónoma.
+        </div>
+        """, unsafe_allow_html=True)
 # =========================================================================
 # TAB 0: VISTA GENERAL (NOC)
 # =========================================================================
@@ -382,7 +410,7 @@ with tabs[0]:
     with col1:
         st.markdown(f"""
             <div class="cyber-card">
-                <div class="cyber-header">🌐 Estado General</div>
+                <div class="cyber-header"> Estado General</div>
                 <h2 style="margin: 0; color: {net_color}; font-weight:800;">{net_status}</h2>
                 <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 0.9rem;">Internet: {state['network']['internet']}</p>
             </div>
@@ -391,7 +419,7 @@ with tabs[0]:
     with col2:
         st.markdown(f"""
             <div class="cyber-card">
-                <div class="cyber-header">👥 Clientes Totales</div>
+                <div class="cyber-header"> Clientes Totales</div>
                 <h2 style="margin: 0; color: #00f2fe; font-weight:800;">{state['network']['clients_total']}</h2>
                 <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 0.9rem;">Portal Cautivo Activo</p>
             </div>
@@ -409,7 +437,7 @@ with tabs[0]:
     with col4:
         st.markdown(f"""
             <div class="cyber-card">
-                <div class="cyber-header">🔋 Carga del Gateway</div>
+                <div class="cyber-header"> Carga del Gateway</div>
                 <h2 style="margin: 0; color: #d946ef; font-weight:800;">CPU: {state['gateway']['cpu']}%</h2>
                 <p style="margin: 5px 0 0 0; color: #94a3b8; font-size: 0.9rem;">Memoria RAM: {state['gateway']['memory']}%</p>
             </div>
@@ -420,7 +448,7 @@ with tabs[0]:
     g1, g2 = st.columns([5, 3])
     
     with g1:
-        st.markdown('<div class="cyber-header">📉 Consumo de Banda WAN en Tiempo Real y Pronóstico</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cyber-header"> Consumo de Banda WAN en Tiempo Real y Pronóstico</div>', unsafe_allow_html=True)
         
         # Obtener histórico del estado actual
         hist_dl = list(state["performance"]["realtime_traffic"]["download"])
@@ -483,7 +511,7 @@ with tabs[0]:
         )
         st.plotly_chart(fig, use_container_width=True)
     with g2:
-        st.markdown('<div class="cyber-header">🚨 Alertas y Diagnósticos en Tiempo Real</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cyber-header"> Alertas y Diagnósticos en Tiempo Real</div>', unsafe_allow_html=True)
         
         # Filtrar alertas predictivas y alertas normales críticas
         critical_alerts = [a for a in state["alerts"] if a["severity"] in ["critical", "error"]]
@@ -509,14 +537,14 @@ with tabs[0]:
             for alert in predictive_alerts[:3]:
                 st.markdown(f"""
                     <div class="alert-box alert-predictive">
-                        <strong>🔮 {alert['title']} (Proyección Preventiva)</strong><br/>
+                        <strong> {alert['title']} (Proyección Preventiva)</strong><br/>
                         {alert['detail']}<br/>
                         <span style="font-size:0.75rem; color:#94a3b8;">Calculado por: Motor Predictivo Omada | {alert['timestamp']}</span>
                     </div>
                     """, unsafe_allow_html=True)
         # Renderizar alertas de información
         if info_alerts:
-            with st.expander("📝 Alertas Informativas y Mitigaciones"):
+            with st.expander(" Alertas Informativas y Mitigaciones"):
                 for alert in info_alerts[:5]:
                     st.markdown(f"""
                         <div class="alert-box alert-info">
@@ -529,7 +557,7 @@ with tabs[0]:
 # TAB 1: CAPA PREDICTIVA IA
 # =========================================================================
 with tabs[1]:
-    st.subheader("🔮 Centro de Análisis y Proyecciones de Red")
+    st.subheader(" Centro de Análisis y Proyecciones de Red")
     
     col_pred1, col_pred2 = st.columns([4, 6])
     
@@ -570,12 +598,12 @@ with tabs[1]:
         t_ram = state["predictions"]["time_to_ram_exhaustion_sec"]
         
         st.markdown("---")
-        st.markdown("### 🕒 Cuenta Regresiva de Hardware")
+        st.markdown("###  Cuenta Regresiva de Hardware")
         
         if t_ram > 0:
             st.markdown(f"""
                 <div class="alert-box alert-critical" style="text-align:center;">
-                    <span style="font-size:0.9rem; text-transform:uppercase;">🚨 Tiempo Estimado para Colapso de Switch L3</span>
+                    <span style="font-size:0.9rem; text-transform:uppercase;"> Tiempo Estimado para Colapso de Switch L3</span>
                     <h1 style="margin:5px 0; color:#ff0055; font-size:2.2rem; font-weight:800;">{t_ram} s</h1>
                     <span style="font-size:0.8rem; color:#f8fafc;">Fuga de memoria RAM detectada. Se proyecta caída de puertos.</span>
                 </div>
@@ -583,7 +611,7 @@ with tabs[1]:
         else:
             st.markdown("""
                 <div class="alert-box alert-info" style="text-align:center;">
-                    <span style="font-size:0.9rem; text-transform:uppercase; color:#94a3b8;">💾 Salud del Switch Core L3</span>
+                    <span style="font-size:0.9rem; text-transform:uppercase; color:#94a3b8;"> Salud del Switch Core L3</span>
                     <h3 style="margin:5px 0; color:#10b981; font-weight:700;">Estable / Sin Fuga</h3>
                     <span style="font-size:0.8rem; color:#94a3b8;">RAM operando bajo el umbral normal.</span>
                 </div>
@@ -592,7 +620,7 @@ with tabs[1]:
         if t_overheat > 0:
             st.markdown(f"""
                 <div class="alert-box alert-critical" style="text-align:center;">
-                    <span style="font-size:0.9rem; text-transform:uppercase;">🔥 Tiempo Estimado para Apagado Térmico</span>
+                    <span style="font-size:0.9rem; text-transform:uppercase;"> Tiempo Estimado para Apagado Térmico</span>
                     <h1 style="margin:5px 0; color:#ffb300; font-size:2.2rem; font-weight:800;">{t_overheat} s</h1>
                     <span style="font-size:0.8rem; color:#f8fafc;">Aumento térmico acelerado en Router. Desconexión inminente.</span>
                 </div>
@@ -607,7 +635,7 @@ with tabs[1]:
                 """, unsafe_allow_html=True)
     # 2. Recomendaciones y Análisis Detallado
     with col_pred2:
-        st.markdown('<div class="cyber-header">🧠 Recomendaciones Inteligentes de Autogestión</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cyber-header"> Recomendaciones Inteligentes de Autogestión</div>', unsafe_allow_html=True)
         
         # Caja de recomendaciones con neón
         recs = state["predictions"]["recommendations"]
@@ -626,7 +654,7 @@ with tabs[1]:
                 time.sleep(0.5)
                 st.rerun()
         elif t_overheat > 0:
-            if st.button("❄️ Aplicar Mitigación: Encender Ventilación Forzada del Router", type="primary", use_container_width=True):
+            if st.button(" Aplicar Mitigación: Encender Ventilación Forzada del Router", type="primary", use_container_width=True):
                 r = httpx.post(f"{API_URL}/api/simulation/action", json={"action": "reset_overheat"})
                 st.success("Refrigeración auxiliar encendida preventivamente.")
                 time.sleep(0.5)
@@ -643,7 +671,7 @@ with tabs[1]:
                 st.success("Canal WiFi cambiado preventivamente.")
                 time.sleep(0.5)
                 st.rerun()
-        st.markdown("### 🔍 Anomalías Detectadas por Tendencia")
+        st.markdown("###  Anomalías Detectadas por Tendencia")
         anomalies = state["predictions"]["anomalies"]
         if anomalies:
             for an in anomalies:
@@ -682,7 +710,7 @@ with tabs[2]:
     col_sec1, col_sec2 = st.columns([1, 1])
     
     with col_sec1:
-        st.markdown('<div class="cyber-header">👥 Usuarios del Portal y Segmentación</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cyber-header"> Usuarios del Portal y Segmentación</div>', unsafe_allow_html=True)
         col_m1, col_m2 = st.columns(2)
         col_m1.metric("Usuarios Activos", state["captive_portal"]["active_users"])
         col_m2.metric("Vouchers Libres", state["captive_portal"]["vouchers_remaining"])
@@ -696,28 +724,12 @@ with tabs[2]:
             st.plotly_chart(fig, use_container_width=True)
             
     with col_sec2:
-        st.markdown('<div class="cyber-header">🛡️ Registro del Cortafuegos y Reputación</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cyber-header"> Registro de Cortafuegos</div>', unsafe_allow_html=True)
         st.markdown(f"**Nivel de Amenazas Activas**: {state['network']['threats']}")
-        
-        # Reputación de Dispositivos
-        if "device_reputation" in state and state["device_reputation"]:
-            df_rep = pd.DataFrame(list(state["device_reputation"].items()), columns=["Dispositivo", "Puntuación"])
-            def color_rep(val):
-                if val >= 80:
-                    return "color: #39ff14"
-                elif val >= 60:
-                    return "color: #ffb300"
-                else:
-                    return "color: #ff0055"
-            style_obj = df_rep.style
-            if hasattr(style_obj, 'map'):
-                st.dataframe(style_obj.map(color_rep, subset=["Puntuación"]), use_container_width=True)
-            else:
-                st.dataframe(style_obj.applymap(color_rep, subset=["Puntuación"]), use_container_width=True)
     st.markdown("---")
     
     # Terminal de logs en tiempo real
-    st.markdown('<div class="cyber-header">💻 Consola Perimetral del Cortafuegos (Logs de Amenazas)</div>', unsafe_allow_html=True)
+    st.markdown('<div class="cyber-header"> Consola Perimetral del Cortafuegos (Logs de Amenazas)</div>', unsafe_allow_html=True)
     logs = state.get("security_logs", [])
     if logs:
         log_text = ""
@@ -744,7 +756,7 @@ with tabs[3]:
     
     col_q1, col_q2 = st.columns([1, 1])
     with col_q1:
-        st.markdown('<div class="cyber-header">📊 Consumo de Ancho de Banda por VLAN (Mbps)</div>', unsafe_allow_html=True)
+        st.markdown('<div class="cyber-header"> Consumo de Ancho de Banda por VLAN (Mbps)</div>', unsafe_allow_html=True)
         vlan_cons = state["performance"]["vlan_consumption"]
         if vlan_cons:
             df_vlan = pd.DataFrame(list(vlan_cons.items()), columns=["VLAN", "Mbps"])
@@ -829,14 +841,14 @@ with tabs[5]:
         net.add_node("Switch Piso 2", title="Switch L2 Acceso", color="#10b981", shape="box")
         net.add_node("AP Biblioteca", title="AP EAP650", color=ap_saturation, shape="dot")
         net.add_node("AP Laboratorio", title="AP EAP650", color="#10b981", shape="dot")
-        net.add_node("AP Docentes", title="AP EAP650", color="#10b981", shape="dot")
+        net.add_node("AP Administración", title="AP EAP650", color="#10b981", shape="dot")
         
         net.add_edge("Router ER605", "Switch Core L3", width=4, color="#00f2fe")
         net.add_edge("Router Backup", "Switch Core L3", width=2, color="#94a3b8")
         net.add_edge("Switch Core L3", "Switch Piso 1", width=3, color="#00f2fe")
         net.add_edge("Switch Core L3", "Switch Piso 2", width=3, color="#00f2fe")
         net.add_edge("Switch Piso 1", "AP Biblioteca", width=2, color="#3b82f6")
-        net.add_edge("Switch Piso 1", "AP Docentes", width=2, color="#3b82f6")
+        net.add_edge("Switch Piso 1", "AP Administración", width=2, color="#3b82f6")
         net.add_edge("Switch Piso 2", "AP Laboratorio", width=2, color="#3b82f6")
         
         with tempfile.NamedTemporaryFile(delete=False, suffix=".html") as tmp:
@@ -851,7 +863,7 @@ with tabs[5]:
 # TAB 6: EVOLUCIÓN HISTÓRICA
 # =========================================================================
 with tabs[6]:
-    st.subheader("📈 Históricos Guardados por el Servidor")
+    st.subheader(" Históricos Guardados por el Servidor")
     
     try:
         res_hist = httpx.get(f"{API_URL}/api/history", timeout=3.0)

@@ -27,7 +27,7 @@ except ImportError:
 # Configuración de logs
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 log = logging.getLogger("omada-server")
-app = FastAPI(title="Omada MCP Backend - Inteligente", version="2.5.0")
+app = FastAPI(title="Omada MCP Backend - Inteligente", version="3.0.0")
 # CORS
 app.add_middleware(
     CORSMiddleware,
@@ -71,7 +71,7 @@ network_state: Dict[str, Any] = {
         "switch_l3": {"status": "Connected", "temp": 38.0, "cpu": 25, "ram": 48},
         "switch_l2": {"status": "Connected", "temp": 35.0, "cpu": 15, "ram": 38},
         "ap_laboratorio": {"status": "Connected", "temp": 34.0, "clients": 18},
-        "ap_docentes": {"status": "Connected", "temp": 33.5, "clients": 14},
+        "ap_administracion": {"status": "Connected", "temp": 33.5, "clients": 14},
         "ap_invitados": {"status": "Connected", "temp": 32.0, "clients": 20}
     },
     "performance": {
@@ -82,7 +82,7 @@ network_state: Dict[str, Any] = {
     },
     "captive_portal": {
         "active_users": 52,
-        "roles_breakdown": {"Estudiantes": 30, "Docentes": 12, "Invitados": 10},
+        "roles_breakdown": {"Estudiantes": 30, "Administración": 12, "Invitados": 10},
         "radius_status": "Connected",
         "vouchers_remaining": 150
     },
@@ -100,18 +100,12 @@ network_state: Dict[str, Any] = {
         "time_to_overheat_sec": -1,
         "time_to_ram_exhaustion_sec": -1,
         "anomalies": [],
-        "recommendations": ["• Estado de red estable. No se proyectan anomalías."]
-    },
-    "device_reputation": {
-        "PC-Laboratorio-01": 95,
-        "Movil-Invitado-A": 88,
-        "SmartTV-Docentes": 97,
-        "Servidor-Local": 99,
-        "Raspberry-Pi-Test": 65
+        "recommendations": ["• Estado de red estable. No se proyectan anomalías."],
+        "auto_mitigation_active": False
     },
     "vlan_users": {
         "VLAN 10 (Admin)": 5,
-        "VLAN 20 (Docentes)": 15,
+        "VLAN 20 (Administración)": 15,
         "VLAN 30 (Alumnos)": 22,
         "VLAN 40 (Invitados)": 10
     },
@@ -144,11 +138,12 @@ trend_ram = deque([48.0]*30, maxlen=30)
 trend_temp = deque([42.5]*30, maxlen=30)
 trend_wifi = deque([88.0]*30, maxlen=30)
 # -------------------------------------------------------------------------
-# Variables del Simulador de Incidentes
+# Variables del Simulador e Incidentes y Auto-Mitigación
 # -------------------------------------------------------------------------
 sim_scenario = "normal"  # "normal", "mass_download", "memory_leak", "overheating", "wifi_interference", "ddos_attack"
 sim_ticks = 0
 sim_qos_active = False
+auto_mitigation_active = False
 # Variables de estado interno de simulación para suavidad
 sim_cpu = 32.0
 sim_ram = 48.0
@@ -174,6 +169,30 @@ class ConnectionManager:
             except Exception:
                 self.disconnect(connection)
 manager = ConnectionManager()
+# -------------------------------------------------------------------------
+# Función Auxiliar: Agregar Alertas y Notificar por Correo Electrónico
+# -------------------------------------------------------------------------
+async def add_alert_and_notify(title: str, detail: str, category: str, severity: str, source: str):
+    """Inserta una alerta en el estado de la red y envía una notificación por correo electrónico"""
+    now_str = datetime.now().isoformat()
+    alert = {
+        "id": f"alert_{int(time.time())}_{random.randint(100, 999)}",
+        "title": title,
+        "detail": detail,
+        "category": category,
+        "severity": severity,
+        "timestamp": now_str,
+        "source": source
+    }
+    
+    # Insertar al inicio de la lista de alertas
+    network_state["alerts"].insert(0, alert)
+    network_state["alerts"] = network_state["alerts"][:50]
+    
+    # Enviar correo en segundo plano
+    if notifier:
+        asyncio.create_task(notifier.send_alert(alert))
+        log.info(f"Notificación encolada para correo: [{category}] {title} (Gravedad: {severity})")
 # -------------------------------------------------------------------------
 # Funciones de conexión a Omada API (reales)
 # -------------------------------------------------------------------------
@@ -223,6 +242,7 @@ async def real_data_loop():
     global network_state, history_traffic, history_vlan_usage, history_clients
     global history_wan_latency, history_wan_jitter, history_wan_packetloss
     global trend_download, trend_upload, trend_ram, trend_temp, trend_wifi
+    global auto_mitigation_active
     log.info("Iniciando bucle de datos reales desde Omada Controller...")
     try:
         token = get_omada_token()
@@ -290,8 +310,8 @@ async def real_data_loop():
                 name = ap.get("name", "").lower()
                 if "laboratorio" in name:
                     network_state["devices"]["ap_laboratorio"]["clients"] = ap.get("clientNum", 0)
-                elif "docentes" in name:
-                    network_state["devices"]["ap_docentes"]["clients"] = ap.get("clientNum", 0)
+                elif "administracion" in name or "docentes" in name:
+                    network_state["devices"]["ap_administracion"]["clients"] = ap.get("clientNum", 0)
                 elif "invitados" in name:
                     network_state["devices"]["ap_invitados"]["clients"] = ap.get("clientNum", 0)
             wifi_quality = 85
@@ -302,11 +322,11 @@ async def real_data_loop():
             if not network_state["performance"]["vlan_consumption"]:
                 network_state["performance"]["vlan_consumption"] = {
                     "VLAN 10 (Admin)": 2.5,
-                    "VLAN 20 (Docentes)": 8.0,
+                    "VLAN 20 (Administración)": 8.0,
                     "VLAN 30 (Alumnos)": 15.2,
                     "VLAN 40 (Invitados)": 4.1
                 }
-            # Alertas
+            # Procesar alertas reales y enviar por correo electrónico
             new_alerts = []
             for ev in events:
                 ev_id = ev.get("id") or f"{ev.get('time')}_{ev.get('eventType')}"
@@ -320,15 +340,20 @@ async def real_data_loop():
                 elif any(k in event_type for k in ["warning", "alert"]):
                     severity = "warning"
                 
-                new_alerts.append({
+                alert_item = {
                     "id": ev_id,
-                    "title": ev.get("eventType", "Evento"),
+                    "title": ev.get("eventType", "Evento Omada"),
                     "detail": ev.get("description", ""),
-                    "category": "Sistema",
+                    "category": "Infraestructura",
                     "severity": severity,
                     "timestamp": ev.get("time", now_str),
-                    "source": ev.get("srcMac", ev.get("deviceName", ""))
-                })
+                    "source": ev.get("deviceName", "Omada Controller")
+                }
+                new_alerts.append(alert_item)
+                
+                # Enviar notificación inmediatamente por email si corresponde
+                if notifier:
+                    asyncio.create_task(notifier.send_alert(alert_item))
             
             if new_alerts:
                 network_state["alerts"] = (new_alerts + network_state["alerts"])[:50]
@@ -359,7 +384,7 @@ async def real_data_loop():
             trend_download.append(download_mbps)
             trend_upload.append(upload_mbps)
             trend_ram.append(float(sw_ram))
-            trend_temp.append(45.0) # Temperatura placeholder en real
+            trend_temp.append(45.0)
             trend_wifi.append(float(wifi_quality))
             # Ejecutar análisis predictivo
             preds = analizador.analizar_predictivo(
@@ -371,13 +396,14 @@ async def real_data_loop():
                 list(trend_wifi)
             )
             
-            # Combinar predicciones y alertas predictivas
+            # Asignar variable de auto-mitigación al estado de predicciones
+            preds["auto_mitigation_active"] = auto_mitigation_active
             network_state["predictions"] = preds
             
-            # Agregar anomalías del motor predictivo como alertas temporales
+            # Agregar anomalías del motor predictivo como alertas
             current_predictive_alerts = []
             for idx, anomaly in enumerate(preds["anomalies"]):
-                current_predictive_alerts.append({
+                alert_item = {
                     "id": f"pred_{now_str}_{idx}",
                     "title": f"Proyección: {anomaly['metric']}",
                     "detail": anomaly["detail"],
@@ -385,13 +411,17 @@ async def real_data_loop():
                     "severity": "predictive" if anomaly["severity"] == "warning" else "critical",
                     "timestamp": now_str,
                     "source": "Motor IA Predictivo"
-                })
+                }
+                current_predictive_alerts.append(alert_item)
+                
+                # Auto-notificar alertas de predicciones por email
+                if notifier:
+                    asyncio.create_task(notifier.send_alert(alert_item))
             
-            # Eliminar alertas predictivas previas y añadir las nuevas
             network_state["alerts"] = [a for a in network_state["alerts"] if a["category"] != "Predicción IA"]
             network_state["alerts"] = (current_predictive_alerts + network_state["alerts"])[:50]
             await manager.broadcast(network_state)
-            log.info(f"[REAL] Telemetría real procesada y enviada a clientes.")
+            log.info(f"[REAL] Telemetría real procesada y alertas notificadas.")
         except Exception as e:
             log.error(f"Error en bucle de datos reales: {e}", exc_info=True)
         await asyncio.sleep(5)
@@ -402,7 +432,7 @@ async def simulated_data_loop():
     global network_state, history_traffic, history_vlan_usage, history_clients
     global history_wan_latency, history_wan_jitter, history_wan_packetloss
     global trend_download, trend_upload, trend_ram, trend_temp, trend_wifi
-    global sim_scenario, sim_ticks, sim_qos_active
+    global sim_scenario, sim_ticks, sim_qos_active, auto_mitigation_active
     global sim_cpu, sim_ram, sim_temp, sim_wifi, sim_clients, sim_download, sim_upload, sim_threats
     log.info("Iniciando bucle de datos SIMULADOS dinámicos...")
     
@@ -420,23 +450,18 @@ async def simulated_data_loop():
                 sim_temp = 41.5 + 4.0 * (sim_cpu / 100.0) + random.uniform(-0.2, 0.2)
                 sim_wifi = 88.0 + 3.0 * math.sin(sim_ticks / 8) + random.uniform(-1, 1)
                 
-                # Consumo de tráfico nominal
+                # Consumo nominal
                 sim_download = 22.0 + 8.0 * math.sin(sim_ticks / 6) + random.uniform(-2, 2)
                 sim_upload = 6.0 + 2.0 * math.sin(sim_ticks / 6) + random.uniform(-0.5, 0.5)
-                
-                # VLANs consumo normal
-                vlan_download = sim_download
             
             elif sim_scenario == "mass_download":
-                # Descarga masiva: tráfico WAN sube a niveles de congestión
                 sim_clients = int(52 + random.randint(-1, 1))
                 sim_cpu = min(95.0, sim_cpu + 6.0 + random.uniform(-1, 1))
                 sim_temp = min(75.0, sim_temp + 0.6)
                 sim_wifi = max(75.0, sim_wifi - 0.5)
                 
                 if sim_qos_active:
-                    # QoS mitigando tráfico en VLAN Alumnos
-                    sim_download = max(28.0, sim_download - 12.0)
+                    sim_download = max(28.0, sim_download - 14.0)
                     sim_cpu = max(40.0, sim_cpu - 8.0)
                     sim_temp = max(45.0, sim_temp - 0.8)
                 else:
@@ -445,7 +470,6 @@ async def simulated_data_loop():
                 sim_upload = min(18.0, sim_upload + 1.5)
                 
             elif sim_scenario == "memory_leak":
-                # RAM de Switch L3 se dispara constantemente
                 sim_clients = int(48 + random.randint(-2, 2))
                 sim_cpu = min(80.0, sim_cpu + 0.8)
                 sim_temp = min(68.0, sim_temp + 0.2)
@@ -453,7 +477,6 @@ async def simulated_data_loop():
                 sim_download = 28.0 + random.uniform(-2, 2)
                 sim_upload = 7.0 + random.uniform(-1, 1)
                 
-                # Fuga
                 sim_ram += 3.5
                 
                 # Colapso físico al pasar de 97%
@@ -466,43 +489,36 @@ async def simulated_data_loop():
                     sim_upload = 0.1
                     network_state["devices"]["switch_l3"]["status"] = "Offline"
                     
-                    # Generar alerta crítica inmediata en server
-                    network_state["alerts"].insert(0, {
-                        "id": f"crit_{now_str}",
-                        "title": "Switch L3 Offline",
-                        "detail": "El Switch Principal L3 ha colapsado debido a desbordamiento de memoria RAM (Cerrado por el kernel).",
-                        "category": "Física",
-                        "severity": "critical",
-                        "timestamp": now_str,
-                        "source": "Switch Core L3"
-                    })
+                    await add_alert_and_notify(
+                        "Switch L3 Offline",
+                        "El Switch Principal L3 ha colapsado debido a desbordamiento de memoria RAM (Cerrado por el kernel).",
+                        "Física",
+                        "critical",
+                        "Switch Core L3"
+                    )
                     
-                    # Auto-reiniciar después de 3 ticks (15 segundos)
+                    # Auto-reiniciar después de 3 ticks
                     sim_scenario = "normal"
                     sim_ticks = 0
                     sim_ram = 48.0
                     network_state["devices"]["switch_l3"]["status"] = "Connected"
-                    network_state["alerts"].insert(0, {
-                        "id": f"info_{now_str}",
-                        "title": "Switch L3 Recuperado",
-                        "detail": "El Switch L3 ha completado el reinicio automático. Tabla de enrutamiento reconstruida.",
-                        "category": "Física",
-                        "severity": "info",
-                        "timestamp": now_str,
-                        "source": "Switch Core L3"
-                    })
+                    await add_alert_and_notify(
+                        "Switch L3 Recuperado",
+                        "El Switch L3 ha completado el reinicio automático. Tabla de enrutamiento reconstruida.",
+                        "Física",
+                        "info",
+                        "Switch Core L3"
+                    )
                     
             elif sim_scenario == "overheating":
-                # Temperatura del Router ER605 sube descontroladamente
                 sim_cpu = 92.0 + random.uniform(-1, 1)
                 sim_ram = 55.0 + random.uniform(-0.5, 0.5)
                 sim_download = 78.0 + random.uniform(-3, 3)
                 sim_upload = 14.0 + random.uniform(-1, 1)
                 
-                # Calentamiento
                 sim_temp += 2.2
                 
-                # Protección térmica apaga el puerto WAN si llega a 88°C
+                # Protección térmica WAN apaga a 88°C
                 if sim_temp >= 88.0:
                     sim_temp = 55.0
                     sim_cpu = 10.0
@@ -511,15 +527,13 @@ async def simulated_data_loop():
                     network_state["gateway"]["wan_status"] = "DOWN"
                     network_state["network"]["internet"] = "Disconnected"
                     
-                    network_state["alerts"].insert(0, {
-                        "id": f"crit_{now_str}",
-                        "title": "Corte de WAN Preventivo",
-                        "detail": "Protección Térmica Activa: El puerto WAN se ha desactivado debido a temperatura crítica en el procesador (88°C).",
-                        "category": "Hardware",
-                        "severity": "critical",
-                        "timestamp": now_str,
-                        "source": "Router ER605"
-                    })
+                    await add_alert_and_notify(
+                        "Corte de WAN Preventivo",
+                        "Protección Térmica Activa: El puerto WAN se ha desactivado debido a temperatura crítica en el procesador (88°C).",
+                        "Hardware",
+                        "critical",
+                        "Router ER605"
+                    )
                     
                     # Restaurar
                     sim_scenario = "normal"
@@ -528,26 +542,23 @@ async def simulated_data_loop():
                     network_state["network"]["internet"] = "Connected"
                     
             elif sim_scenario == "wifi_interference":
-                # Señal WiFi colapsa por interferencias electromagnéticas externas
-                sim_clients = max(12, int(sim_clients - 2)) # Clientes se desconectan por mala señal
+                sim_clients = max(12, int(sim_clients - 2))
                 sim_cpu = 20.0 + random.uniform(-2, 2)
                 sim_ram = 44.0
                 sim_temp = 43.0
                 sim_download = 5.0 + random.uniform(-1, 1)
                 sim_upload = 1.2
                 
-                # Degradación
                 sim_wifi = max(10.0, sim_wifi - 9.0)
                 
             elif sim_scenario == "ddos_attack":
-                # Ataque DDoS de inundación Syn-Flood
                 sim_threats = min(15, sim_threats + random.randint(1, 3))
                 sim_clients = int(120 + random.randint(-5, 5))
                 sim_cpu = min(99.5, sim_cpu + 18.0)
                 sim_ram = min(92.0, sim_ram + 1.2)
                 sim_temp = min(82.0, sim_temp + 1.4)
                 sim_wifi = max(45.0, sim_wifi - 2.5)
-                sim_download = 98.8  # Inundación de enlace
+                sim_download = 98.8
                 sim_upload = 19.5
                 
                 if sim_ticks > 6:
@@ -555,15 +566,13 @@ async def simulated_data_loop():
                     network_state["gateway"]["wan_status"] = "DOWN"
                 
                 if sim_ticks == 1:
-                    network_state["alerts"].insert(0, {
-                        "id": f"sec_{now_str}",
-                        "title": "Ataque DDoS Detectado",
-                        "detail": "Inundación masiva de paquetes SYN dirigidos al puerto 80/443 desde múltiples IPs externas.",
-                        "category": "Seguridad",
-                        "severity": "critical",
-                        "timestamp": now_str,
-                        "source": "Firewall Omada"
-                    })
+                    await add_alert_and_notify(
+                        "Ataque DDoS Detectado",
+                        "Inundación masiva de paquetes SYN dirigidos al puerto 80/443 desde múltiples IPs externas.",
+                        "Seguridad",
+                        "critical",
+                        "Firewall Omada"
+                    )
             # --- Limitar rangos lógicos ---
             sim_cpu = max(0.0, min(100.0, sim_cpu))
             sim_ram = max(0.0, min(100.0, sim_ram))
@@ -590,7 +599,7 @@ async def simulated_data_loop():
             # Calidad WiFi y Access Points
             network_state["performance"]["wifi_quality"] = int(sim_wifi)
             network_state["devices"]["ap_laboratorio"]["clients"] = int(sim_clients * 0.35)
-            network_state["devices"]["ap_docentes"]["clients"] = int(sim_clients * 0.25)
+            network_state["devices"]["ap_administracion"]["clients"] = int(sim_clients * 0.25)
             network_state["devices"]["ap_invitados"]["clients"] = int(sim_clients * 0.4)
             # VLANs segmentación consumo
             if sim_scenario == "mass_download" and not sim_qos_active:
@@ -610,30 +619,21 @@ async def simulated_data_loop():
                 v40 = sim_download * 0.10
             network_state["performance"]["vlan_consumption"] = {
                 "VLAN 10 (Admin)": round(v10, 2),
-                "VLAN 20 (Docentes)": round(v20, 2),
+                "VLAN 20 (Administración)": round(v20, 2),
                 "VLAN 30 (Alumnos)": round(v30, 2),
                 "VLAN 40 (Invitados)": round(v40, 2)
-            }
-            
-            # Reputación dinámica
-            network_state["device_reputation"] = {
-                "PC-Laboratorio-01": 95,
-                "Movil-Invitado-A": 85 if sim_scenario != "ddos_attack" else 28,
-                "SmartTV-Docentes": 98,
-                "Servidor-Local": 99,
-                "Raspberry-Pi-Test": 65 if sim_scenario != "wifi_interference" else 35
             }
             # VLAN Users
             network_state["vlan_users"] = {
                 "VLAN 10 (Admin)": int(sim_clients * 0.1),
-                "VLAN 20 (Docentes)": int(sim_clients * 0.25),
+                "VLAN 20 (Administración)": int(sim_clients * 0.25),
                 "VLAN 30 (Alumnos)": int(sim_clients * 0.45) if sim_scenario != "ddos_attack" else int(sim_clients * 0.75),
                 "VLAN 40 (Invitados)": int(sim_clients * 0.2)
             }
             # AP details list
             network_state["ap_details"] = [
                 {"name": "AP Laboratorio", "clients": int(sim_clients * 0.35), "channel": 6, "signal_dbm": -45 if sim_wifi > 70 else -75, "saturation": "Alta" if sim_clients > 60 else "Media"},
-                {"name": "AP Docentes", "clients": int(sim_clients * 0.25), "channel": 11, "signal_dbm": -50, "saturation": "Media"},
+                {"name": "AP Administración", "clients": int(sim_clients * 0.25), "channel": 11, "signal_dbm": -50, "saturation": "Media"},
                 {"name": "AP Biblioteca", "clients": int(sim_clients * 0.4) if sim_scenario != "mass_download" else int(sim_clients * 0.6), "channel": 1, "signal_dbm": -55 if sim_wifi > 60 else -82, "saturation": "Alta" if sim_scenario == "mass_download" else "Media"}
             ]
             # Calidad de internet
@@ -674,11 +674,14 @@ async def simulated_data_loop():
                 list(trend_temp),
                 list(trend_wifi)
             )
+            
+            # Asignar variable de auto-mitigación al estado de predicciones
+            preds["auto_mitigation_active"] = auto_mitigation_active
             network_state["predictions"] = preds
-            # 4. Generar Alertas Predictivas en tiempo real
+            # 4. Generar Alertas Predictivas y enviar notificaciones por correo
             current_predictive_alerts = []
             for idx, anomaly in enumerate(preds["anomalies"]):
-                current_predictive_alerts.append({
+                alert_item = {
                     "id": f"pred_{now_str}_{idx}",
                     "title": f"Proyección: {anomaly['metric']}",
                     "detail": anomaly["detail"],
@@ -686,11 +689,64 @@ async def simulated_data_loop():
                     "severity": "predictive" if anomaly["severity"] == "warning" else "critical",
                     "timestamp": now_str,
                     "source": "Motor IA Predictivo"
-                })
-            # Reemplazar alertas predictivas previas
+                }
+                current_predictive_alerts.append(alert_item)
+                
+                # Auto-notificar alertas de predicciones por email
+                if notifier:
+                    asyncio.create_task(notifier.send_alert(alert_item))
             network_state["alerts"] = [a for a in network_state["alerts"] if a["category"] != "Predicción IA"]
             network_state["alerts"] = (current_predictive_alerts + network_state["alerts"])[:50]
-            # Agregar logs de seguridad simulados si hay ataques
+            # 5. 🤖 AUTO-MITIGACIÓN PREDICTIVA IA (AUTO-HEALING EN SIMULACIÓN)
+            if auto_mitigation_active:
+                # 5.1 Fuga de Memoria
+                if (preds["time_to_ram_exhaustion_sec"] > 0 and preds["time_to_ram_exhaustion_sec"] < 40) or sim_ram > 80.0:
+                    sim_ram = 48.0
+                    if sim_scenario == "memory_leak":
+                        sim_scenario = "normal"
+                    network_state["devices"]["switch_l3"]["status"] = "Connected"
+                    msg = "IA Auto-Healing: Reinicio preventivo y vaciado de memoria RAM ejecutado en Switch L3 tras proyección de colapso."
+                    await add_alert_and_notify("Auto-Mitigación IA: RAM Switch L3", msg, "Mitigación IA", "predictive", "Motor IA Predictivo")
+                    log.info(f"🤖 AUTO-HEALING: {msg}")
+                    
+                # 5.2 Sobretemperatura
+                elif (preds["time_to_overheat_sec"] > 0 and preds["time_to_overheat_sec"] < 40) or sim_temp > 76.0:
+                    sim_temp = 42.5
+                    sim_cpu = 35.0
+                    if sim_scenario == "overheating":
+                        sim_scenario = "normal"
+                    msg = "IA Auto-Healing: Activada ventilación de emergencia perimetral para enfriar el procesador del Router ER605."
+                    await add_alert_and_notify("Auto-Mitigación IA: Térmica Router", msg, "Mitigación IA", "predictive", "Motor IA Predictivo")
+                    log.info(f"🤖 AUTO-HEALING: {msg}")
+                    
+                # 5.3 Congestión WAN
+                elif preds["congestion_probability"] > 70 and not sim_qos_active:
+                    sim_qos_active = True
+                    msg = "IA Auto-Healing: Aplicada regla de QoS dinámico en VLAN 30 para reducir tráfico de bajada masivo."
+                    await add_alert_and_notify("Auto-Mitigación IA: Ancho de Banda", msg, "Mitigación IA", "predictive", "Motor IA Predictivo")
+                    log.info(f"🤖 AUTO-HEALING: {msg}")
+                    
+                # 5.4 Interferencia WiFi
+                elif preds["wifi_degradation_risk"] == "Alto" and sim_scenario == "wifi_interference":
+                    sim_wifi = 88.0
+                    sim_scenario = "normal"
+                    msg = "IA Auto-Healing: AP Biblioteca reasignado adaptativamente al canal 6 para mitigar ruido electromagnético."
+                    await add_alert_and_notify("Auto-Mitigación IA: Señal WiFi", msg, "Mitigación IA", "predictive", "Motor IA Predictivo")
+                    log.info(f"🤖 AUTO-HEALING: {msg}")
+                    
+                # 5.5 DDoS Attack
+                elif sim_scenario == "ddos_attack" and sim_threats > 0:
+                    sim_threats = 0
+                    sim_clients = 52
+                    sim_cpu = 30.0
+                    sim_download = 25.0
+                    sim_scenario = "normal"
+                    network_state["network"]["internet"] = "Connected"
+                    network_state["gateway"]["wan_status"] = "UP"
+                    msg = "IA Auto-Healing: Reglas dinámicas de ACL cargadas en Firewall. Bloqueadas direcciones IP del ataque DDoS."
+                    await add_alert_and_notify("Auto-Mitigación IA: Seguridad DDoS", msg, "Mitigación IA", "predictive", "Motor IA Predictivo")
+                    log.info(f"🤖 AUTO-HEALING: {msg}")
+            # Logs de seguridad
             if sim_scenario == "ddos_attack" and sim_ticks % 3 == 0:
                 network_state["security_logs"].insert(0, {
                     "timestamp": now_str,
@@ -701,10 +757,10 @@ async def simulated_data_loop():
                 network_state["security_logs"] = network_state["security_logs"][:100]
             # Broadcast por WS
             await manager.broadcast(network_state)
-            log.info(f"[SIMULADOR] Ciclo ejecutado. Escenario: {sim_scenario}. Ticks: {sim_ticks}. Clientes: {sim_clients}. Descarga: {sim_download:.1f} Mbps.")
+            log.info(f"[SIMULADOR] Ciclo ejecutado. Auto-Mitigación: {auto_mitigation_active}. Escenario: {sim_scenario}.")
         except Exception as e:
             log.error(f"Error en bucle de simulación: {e}", exc_info=True)
-        await asyncio.sleep(5) # Ciclo de actualización cada 5 segundos
+        await asyncio.sleep(5)
 # -------------------------------------------------------------------------
 # Evento startup: Lanzar bucles y fallbacks
 # -------------------------------------------------------------------------
@@ -741,13 +797,25 @@ def get_recommendations():
         "recommendations": network_state["predictions"]["recommendations"],
         "timestamp": network_state["timestamp"]
     }
+# --- CONTROL DEL AUTO-HEALING (AUTO-MITIGACIÓN) ---
+@app.get("/api/simulation/automitigation")
+def get_automitigation():
+    return {"active": auto_mitigation_active}
+class AutoMitigationRequest(BaseModel):
+    active: bool
+@app.post("/api/simulation/automitigation")
+def set_automitigation(req: AutoMitigationRequest):
+    global auto_mitigation_active
+    auto_mitigation_active = req.active
+    log.info(f"SIMULACIÓN: Auto-mitigación IA cambiada manualmente a: {auto_mitigation_active}")
+    return {"status": "success", "active": auto_mitigation_active}
 # --- CONTROL DEL SIMULADOR DE INCIDENTES ---
 class ScenarioRequest(BaseModel):
     scenario: str
 class ActionRequest(BaseModel):
     action: str
 @app.post("/api/simulation/scenario")
-def set_simulation_scenario(req: ScenarioRequest):
+async def set_simulation_scenario(req: ScenarioRequest):
     global sim_scenario, sim_ticks, sim_qos_active
     global sim_cpu, sim_ram, sim_temp, sim_wifi, sim_clients, sim_download, sim_upload, sim_threats
     
@@ -767,49 +835,50 @@ def set_simulation_scenario(req: ScenarioRequest):
     elif sim_scenario == "ddos_attack":
         sim_threats = 5
         sim_clients = 85
-    elif sim_scenario == "wifi_interference":
-        pass
         
     log.info(f"SIMULACIÓN: Escenario cambiado manualmente a: '{sim_scenario}'")
+    
+    # Notificar inyección de escenario por email
+    await add_alert_and_notify(
+        f"Simulador: Escenario Inyectado",
+        f"Se ha inyectado el escenario de pruebas: '{sim_scenario.upper()}' en la red.",
+        "Simulador",
+        "warning",
+        "Consola de Control"
+    )
+    
     return {"status": "success", "active_scenario": sim_scenario}
 @app.post("/api/simulation/action")
-def trigger_simulation_action(req: ActionRequest):
+async def trigger_simulation_action(req: ActionRequest):
     global sim_scenario, sim_qos_active, sim_ram, sim_temp, sim_wifi, sim_cpu, sim_download, sim_threats, sim_clients
     action = req.action
-    
-    now_str = datetime.now().isoformat()
     msg = ""
     
     if action == "reset_switch":
-        # Mitigar fuga de memoria
         sim_ram = 48.0
         if sim_scenario == "memory_leak":
             sim_scenario = "normal"
-        msg = "Comando ejecutado: Switch L3 reiniciado y memoria vaciada preventivamente."
+        msg = "Comando manual ejecutado: Switch L3 reiniciado y memoria vaciada preventivamente."
         network_state["devices"]["switch_l3"]["status"] = "Connected"
         
     elif action == "apply_qos":
-        # Activar mitigación de ancho de banda
         sim_qos_active = True
-        msg = "QoS Predictivo activado: Aplicado límite de 10 Mbps a VLAN 30 (Alumnos)."
+        msg = "QoS manual activado: Aplicado límite de 10 Mbps a VLAN 30 (Alumnos)."
         
     elif action == "reset_overheat":
-        # Enfriar router
         sim_temp = 42.5
         sim_cpu = 35.0
         if sim_scenario == "overheating":
             sim_scenario = "normal"
-        msg = "Comando ejecutado: Sistema de refrigeración forzada encendido. Router enfriado a 42.5°C."
+        msg = "Comando manual ejecutado: Sistema de refrigeración forzada encendido. Router enfriado a 42.5°C."
         
     elif action == "change_channel":
-        # Resolver interferencia WiFi
         sim_wifi = 88.0
         if sim_scenario == "wifi_interference":
             sim_scenario = "normal"
-        msg = "Comando ejecutado: AP Biblioteca movido dinámicamente al canal 6 (Canal libre de ruido)."
+        msg = "Comando manual ejecutado: AP Biblioteca movido dinámicamente al canal 6 (Canal libre de ruido)."
         
     elif action == "block_ddos":
-        # Mitigar ataque DDoS
         sim_threats = 0
         sim_clients = 52
         sim_cpu = 30.0
@@ -818,10 +887,9 @@ def trigger_simulation_action(req: ActionRequest):
             sim_scenario = "normal"
         network_state["network"]["internet"] = "Connected"
         network_state["gateway"]["wan_status"] = "UP"
-        msg = "Comando ejecutado: Reglas del Firewall actualizadas. Bloqueados rangos de IP atacantes."
+        msg = "Comando manual ejecutado: Reglas del Firewall actualizadas. Bloqueados rangos de IP atacantes."
         
     elif action == "reset_all":
-        # Restablecer todo
         sim_scenario = "normal"
         sim_qos_active = False
         sim_ram = 48.0
@@ -839,21 +907,13 @@ def trigger_simulation_action(req: ActionRequest):
     else:
         return {"error": f"Acción '{action}' no reconocida."}
         
-    # Crear alerta informativa de la acción tomada
-    network_state["alerts"].insert(0, {
-        "id": f"act_{now_str}",
-        "title": "Mitigación Ejecutada",
-        "detail": msg,
-        "category": "Mitigación",
-        "severity": "info",
-        "timestamp": now_str,
-        "source": "Consola del Administrador"
-    })
+    # Crear alerta informativa y enviar notificación
+    await add_alert_and_notify("Mitigación Manual", msg, "Mitigación", "info", "Consola del Administrador")
     
     log.info(f"SIMULACIÓN: Acción ejecutada: '{action}' -> {msg}")
     return {"status": "success", "message": msg, "active_scenario": sim_scenario}
 # -------------------------------------------------------------------------
-# Asistente IA (Gemini con contexto rico de red)
+# Asistente IA (Gemini con contexto de red)
 # -------------------------------------------------------------------------
 class ChatRequest(BaseModel):
     pregunta: str
@@ -869,6 +929,7 @@ async def chat_asistente_ia(request: ChatRequest):
         f"WiFi: {network_state['performance']['wifi_quality']}%. "
         f"WAN: {network_state['gateway']['wan_status']} (latencia {network_state['gateway']['latency_ms']}ms). "
         f"Portal: {network_state['captive_portal']['active_users']} usuarios activos. "
+        f"Auto-Mitigación activa: {auto_mitigation_active}. "
         f"Alertas de IA activas: {[a['detail'] for a in network_state['alerts'] if a['category']=='Predicción IA']}"
     )
     alertas_recientes = "\n".join(
@@ -903,46 +964,45 @@ async def chat_asistente_ia(request: ChatRequest):
             "⚠️ **Fuga de Memoria Detectada en Switch L3**.\n\n"
             "El análisis de tendencia de los últimos ticks indica un crecimiento lineal de la RAM en el Switch Core. "
             "Si la RAM cruza el 95%, el Switch colapsará desconectando toda la red.\n\n"
-            "**Recomendación**: Haga clic en **'Ejecutar Reinicio Preventivo'** en el panel predictivo para vaciar el búfer de memoria."
+            "**Recomendación**: " + ("La Auto-Mitigación por IA está activa y resolverá esto automáticamente." if auto_mitigation_active else "Haga clic en 'Ejecutar Reinicio Preventivo' en la pestaña predictiva o active la Auto-Mitigación.")
         )
     elif sim_scenario == "mass_download":
         desc = (
             "### Diagnóstico del Asistente de Red\n\n"
             "⚠️ **Saturación de Ancho de Banda WAN**.\n\n"
             "Se detecta tráfico inusualmente alto en la VLAN de Alumnos. La velocidad de descarga está rozando el límite de 100 Mbps del canal. "
-            "Esto aumentará drásticamente la latencia y la pérdida de paquetes para docentes y administración.\n\n"
-            "**Recomendación**: Active la regla de **'Mitigación QoS Predictivo'** en la barra lateral para limitar dinámicamente la tasa de transferencia de los estudiantes a 10 Mbps."
+            "Esto aumentará la latencia para la VLAN de Administración.\n\n"
+            "**Recomendación**: " + ("La Auto-Mitigación por IA está activa y limitará a los estudiantes automáticamente." if auto_mitigation_active else "Active la regla de 'Mitigación QoS' en la barra lateral.")
         )
     elif sim_scenario == "overheating":
         desc = (
             "### Diagnóstico del Asistente de Red\n\n"
             "🔥 **Peligro Térmico en Router ER605**.\n\n"
             "La CPU se encuentra al 92% de uso constante y la temperatura está subiendo rápidamente. "
-            "Si alcanza el umbral de seguridad (88°C), el hardware suspenderá el puerto WAN principal para evitar daños físicos por calor.\n\n"
-            "**Recomendación**: Ejecute la acción **'Activar Refrigeración Auxiliar'** desde el panel predictivo para estabilizar térmicamente la unidad."
+            "Si alcanza 88°C, el puerto WAN se desactivará preventivamente.\n\n"
+            "**Recomendación**: " + ("La Auto-Mitigación por IA está activa y encenderá la ventilación." if auto_mitigation_active else "Haga clic en 'Enfriar Router' en la barra lateral.")
         )
     elif sim_scenario == "wifi_interference":
         desc = (
             "### Diagnóstico del Asistente de Red\n\n"
-            "📡 **Interferencia Electromagnética Severa**.\n\n"
-            "La calidad WiFi de la Biblioteca ha caído drásticamente debido a ruido de canal (interferencias externas). "
-            "Los clientes experimentarán desconexiones frecuentes y una velocidad de datos mínima.\n\n"
-            "**Recomendación**: Ejecute **'Cambiar Canal WiFi'** para mover el AP Biblioteca al canal 6 de forma adaptativa."
+            "📡 **Interferencia Electromagnética en AP Biblioteca**.\n\n"
+            "La calidad WiFi ha caído drásticamente por saturación del canal 11.\n\n"
+            "**Recomendación**: " + ("La IA auto-mitigará cambiando de canal de manera autónoma." if auto_mitigation_active else "Cambie el canal al canal 6 de forma adaptativa desde la barra lateral.")
         )
     elif sim_scenario == "ddos_attack":
         desc = (
             "### Diagnóstico del Asistente de Red\n\n"
             "🛡️ **Alerta de Seguridad: Ataque DDoS Activo**.\n\n"
             "El firewall reporta una inundación inusual de paquetes SYN que saturan el enrutamiento. "
-            "Se está produciendo una denegación de servicio. La conexión a Internet está inestable o caída.\n\n"
-            "**Recomendación**: Haga clic en **'Bloquear IPs de Ataque'** para cargar las ACLs de bloqueo dinámico en el firewall perimetral."
+            "La conexión a Internet está inestable o caída.\n\n"
+            "**Recomendación**: " + ("La IA está bloqueando los rangos de IPs atacantes de forma autónoma." if auto_mitigation_active else "Haga clic en 'Bloquear Atacantes' en la barra lateral.")
         )
     else:
         desc = (
             "### Diagnóstico del Asistente de Red\n\n"
             "🟢 **La red opera de forma óptima**.\n\n"
             "No se registran amenazas activas, fugas de memoria ni degradación en la señal WiFi. "
-            "El canal de descarga WAN dispone de capacidad libre. La latencia se mantiene estable en 15 ms."
+            "El canal de descarga dispone de capacidad libre. La latencia se mantiene estable en 15 ms."
         )
     return {"response": desc, "engine": "Omada IA Engine (Local)"}
 # -------------------------------------------------------------------------
